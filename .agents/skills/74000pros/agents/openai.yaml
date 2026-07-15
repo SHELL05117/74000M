@@ -1,0 +1,4 @@
+interface:
+  display_name: "74000 PROS Project Protocol"
+  short_description: "Guide safe offline and hardware-validated 74000M work"
+  default_prompt: "Use $74000pros to advance 74000M development from required documents, using offline parallel work while keeping unverified hardware capabilities locked."
