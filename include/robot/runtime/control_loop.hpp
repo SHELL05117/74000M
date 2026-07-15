@@ -34,6 +34,9 @@ class SafeStopControlCycle final : public ControlCycle {
 
 struct ControlLoopConfig {
   std::uint32_t period_ms{10};
+  // Commissioning-only mode: use RequestSource::Test while not connected to a
+  // field. A field connection forces Disabled instead of enabling this path.
+  bool commissioning_test_mode{};
 };
 
 class ControlLoop {
@@ -57,12 +60,20 @@ class ControlLoop {
     ModeSnapshot before = modes_.snapshot();
     const FrameHeader probe{start_us, sequence_ + 1, before.epoch};
     const CompetitionSnapshot competition = competition_.readOnce(probe);
-    const CompetitionMode requested =
-        competition.disabled
-            ? CompetitionMode::Disabled
-            : (competition.autonomous ? CompetitionMode::AutonomousInterface
-                                      : CompetitionMode::Driver);
-    modes_.transitionTo(requested, start_us);
+    CompetitionMode requested{CompetitionMode::Disabled};
+    if (!competition.disabled) {
+      if (config_.commissioning_test_mode) {
+        requested = competition.field_connected
+                        ? CompetitionMode::Disabled
+                        : CompetitionMode::Test;
+      } else {
+        requested = competition.autonomous
+                        ? CompetitionMode::AutonomousInterface
+                        : CompetitionMode::Driver;
+      }
+    }
+    modes_.transitionTo(requested, start_us, 0,
+                        competition.field_connected);
     const ModeSnapshot mode = modes_.snapshot();
     const FrameHeader header{start_us, ++sequence_, mode.epoch};
     TimingSample sample = timing_.begin(header);

@@ -17,15 +17,26 @@ struct MotorPortConfig {
   std::int8_t smart_port{};
   bool reversed{};
   std::uint16_t cartridge_rpm{};
+  // Motor output-shaft revolutions required for one drive-wheel revolution.
+  // This is per motor because mixed V5 cartridges can use different external
+  // gear trains while producing the same wheel speed.
+  double motor_rev_per_wheel_rev{1.0};
 };
 
 // The supplied wiring notation uses true=forward. The HAL stores whether the
 // motor is reversed, so the two flags intentionally have opposite polarity.
 constexpr MotorPortConfig motorFromForwardFlag(
     std::int8_t smart_port, std::uint16_t cartridge_rpm,
-    bool forward_positive) noexcept {
-  return {smart_port, !forward_positive, cartridge_rpm};
+    bool forward_positive,
+    double motor_rev_per_wheel_rev = 1.0) noexcept {
+  return {smart_port, !forward_positive, cartridge_rpm,
+          motor_rev_per_wheel_rev};
 }
+
+struct ImuConfig {
+  bool installed{};
+  std::uint8_t smart_port{};
+};
 
 struct RotationSensorConfig {
   bool installed{};
@@ -37,14 +48,13 @@ struct RotationSensorConfig {
 struct HardwareConfig {
   std::array<MotorPortConfig, kMotorsPerSide> left{};
   std::array<MotorPortConfig, kMotorsPerSide> right{};
-  std::uint8_t imu_port{};
+  ImuConfig imu{};
   RotationSensorConfig parallel_rotation{};
   RotationSensorConfig lateral_rotation{};
 };
 
 struct GeometryConfig {
   double nominal_drive_wheel_diameter_m{};
-  double motor_rev_per_wheel_rev{};
   double nominal_track_width_m{};
 };
 
@@ -102,6 +112,7 @@ enum ConfigFault : std::uint32_t {
   kBadVoltageLimit = 1u << 10,
   kCapabilityViolation = 1u << 11,
   kBadRoute = 1u << 12,
+  kBadTransmission = 1u << 13,
 };
 
 struct ConfigCheck {
@@ -116,6 +127,13 @@ inline bool knownCartridge(std::uint16_t rpm) noexcept {
 
 inline bool finitePositive(double value) noexcept {
   return std::isfinite(value) && value > 0.0;
+}
+
+inline double nominalWheelRpm(const MotorPortConfig& motor) noexcept {
+  return finitePositive(motor.motor_rev_per_wheel_rev)
+             ? static_cast<double>(motor.cartridge_rpm) /
+                   motor.motor_rev_per_wheel_rev
+             : 0.0;
 }
 
 inline bool capabilityChainValid(const RobotCapabilities& capabilities) {
@@ -165,26 +183,36 @@ inline ConfigCheck validateConfig(const RobotConfig& config,
     claim_port(static_cast<std::uint8_t>(motor.smart_port));
     if (!knownCartridge(motor.cartridge_rpm))
       result.fault_bits |= kBadCartridge;
+    if (!finitePositive(motor.motor_rev_per_wheel_rev))
+      result.fault_bits |= kBadTransmission;
   }
   for (const auto& motor : config.hardware.right) {
     claim_port(static_cast<std::uint8_t>(motor.smart_port));
     if (!knownCartridge(motor.cartridge_rpm))
       result.fault_bits |= kBadCartridge;
+    if (!finitePositive(motor.motor_rev_per_wheel_rev))
+      result.fault_bits |= kBadTransmission;
   }
-  claim_port(config.hardware.imu_port);
+  if (config.hardware.imu.installed)
+    claim_port(config.hardware.imu.smart_port);
   if (config.hardware.parallel_rotation.installed)
     claim_port(config.hardware.parallel_rotation.smart_port);
   if (config.hardware.lateral_rotation.installed)
     claim_port(config.hardware.lateral_rotation.smart_port);
 
   if (!finitePositive(config.geometry.nominal_drive_wheel_diameter_m) ||
-      !finitePositive(config.geometry.motor_rev_per_wheel_rev) ||
       !finitePositive(config.geometry.nominal_track_width_m)) {
     result.fault_bits |= kBadGeometry;
   }
-  if (!finitePositive(config.calibration.left_m_per_motor_rad) ||
-      !finitePositive(config.calibration.right_m_per_motor_rad) ||
-      !finitePositive(config.calibration.effective_track_width_m)) {
+  const bool calibration_required =
+      config.capabilities.pose_good ||
+      config.capabilities.autonomous_chassis_velocity ||
+      config.capabilities.autonomous_motion ||
+      config.capabilities.competition_routes;
+  if (calibration_required &&
+      (!finitePositive(config.calibration.left_m_per_motor_rad) ||
+       !finitePositive(config.calibration.right_m_per_motor_rad) ||
+       !finitePositive(config.calibration.effective_track_width_m))) {
     result.fault_bits |= kBadCalibration;
   }
   if (!finitePositive(config.runtime.nominal_period_s) ||
@@ -221,22 +249,45 @@ inline ConfigCheck validateConfig(const RobotConfig& config,
   return result;
 }
 
-inline RobotConfig makeOfflineRobotConfig() {
+inline RobotConfig make1690XCommissioningConfig() {
   RobotConfig config{};
-  config.identity = {"74000", "UNVERIFIED", "74000M", "offline", 0, 1, 0};
+  constexpr double kRatio6MotorRevPerWheelRev = 48.0 / 36.0;
+  constexpr double kRatio18MotorRevPerWheelRev =
+      (12.0 / 36.0) * (48.0 / 36.0);
+
+  config.identity = {"1690X", "1690X", "1690X SAMPLE", "commission", 0,
+                     2, 0};
   config.hardware.left = {{
-      motorFromForwardFlag(11, 600, false),
-      motorFromForwardFlag(12, 200, true),
-      motorFromForwardFlag(13, 600, true),
+      motorFromForwardFlag(11, 600, false,
+                           kRatio6MotorRevPerWheelRev),
+      motorFromForwardFlag(12, 200, true,
+                           kRatio18MotorRevPerWheelRev),
+      motorFromForwardFlag(13, 600, true,
+                           kRatio6MotorRevPerWheelRev),
   }};
   config.hardware.right = {{
-      motorFromForwardFlag(1, 600, true),
-      motorFromForwardFlag(2, 200, false),
-      motorFromForwardFlag(3, 600, false),
+      motorFromForwardFlag(1, 600, true,
+                           kRatio6MotorRevPerWheelRev),
+      motorFromForwardFlag(2, 200, false,
+                           kRatio18MotorRevPerWheelRev),
+      motorFromForwardFlag(3, 600, false,
+                           kRatio6MotorRevPerWheelRev),
   }};
+  config.hardware.imu = {false, 0};
+  config.geometry = {0.06985, 0.1524};
+  // CAD/nominal values are not promoted to fitted odometry calibration.
+  config.calibration = {};
+  // Initial commissioning build is physically capped at 4 V.
+  config.electrical.max_command_voltage_V = 4.0;
   config.hardware_verification = VerificationLevel::Implemented;
   config.selected_route = RouteIds::kDoNothing;
   return config;
+}
+
+// Kept as a compatibility entry point for existing callers. It now returns
+// the identified, capability-locked 1690X commissioning profile.
+inline RobotConfig makeOfflineRobotConfig() {
+  return make1690XCommissioningConfig();
 }
 
 }  // namespace robot

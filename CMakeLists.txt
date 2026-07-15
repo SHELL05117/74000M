@@ -33,6 +33,7 @@ if(BUILD_TESTING)
         tests/test_sensors.cpp
         tests/test_odometry.cpp
         tests/test_manual_drive.cpp
+        tests/test_commissioning_arcade.cpp
         tests/test_scheduler.cpp
         tests/test_health.cpp
         tests/test_calibration.cpp

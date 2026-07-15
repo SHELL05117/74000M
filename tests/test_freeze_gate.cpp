@@ -13,7 +13,7 @@ robot::HardwareConfig fakeHardware() {
   robot::HardwareConfig hardware{};
   hardware.left = {{{1, false, 200}, {2, false, 200}, {3, false, 200}}};
   hardware.right = {{{4, true, 200}, {5, true, 200}, {6, true, 200}}};
-  hardware.imu_port = 7;
+  hardware.imu = {true, 7};
   return hardware;
 }
 

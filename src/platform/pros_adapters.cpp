@@ -140,8 +140,8 @@ bool ProsDriveIO::initialize() {
 }
 
 bool ProsDriveIO::beginImuCalibration() {
-  return structurally_valid_ &&
-         pros::c::imu_reset(hardware_.imu_port) != PROS_ERR;
+  return structurally_valid_ && hardware_.imu.installed &&
+         pros::c::imu_reset(hardware_.imu.smart_port) != PROS_ERR;
 }
 
 MotorSample ProsDriveIO::readMotor(const MotorPortConfig& motor) {
@@ -198,24 +198,33 @@ RawDriveInputs ProsDriveIO::readAll(const FrameHeader& header) {
     inputs.right.motor[i] = readMotor(hardware_.right[i]);
   }
 
-  const auto imu_status = pros::c::imu_get_status(hardware_.imu_port);
-  inputs.imu.status_api_ok = imu_status != pros::E_IMU_STATUS_ERROR;
-  inputs.imu.calibrating =
-      inputs.imu.status_api_ok &&
-      (static_cast<std::uint32_t>(imu_status) &
-       static_cast<std::uint32_t>(pros::E_IMU_STATUS_CALIBRATING)) != 0;
+  if (hardware_.imu.installed) {
+    const auto imu_status =
+        pros::c::imu_get_status(hardware_.imu.smart_port);
+    inputs.imu.status_api_ok = imu_status != pros::E_IMU_STATUS_ERROR;
+    inputs.imu.calibrating =
+        inputs.imu.status_api_ok &&
+        (static_cast<std::uint32_t>(imu_status) &
+         static_cast<std::uint32_t>(pros::E_IMU_STATUS_CALIBRATING)) != 0;
 
-  const double rotation_deg =
-      pros::c::imu_get_rotation(hardware_.imu_port);
-  inputs.imu.rotation_rad =
-      makeSample(units::degreesToRadians(rotation_deg), pros::c::micros(),
-                 std::isfinite(rotation_deg) && !inputs.imu.calibrating);
+    const double rotation_deg =
+        pros::c::imu_get_rotation(hardware_.imu.smart_port);
+    inputs.imu.rotation_rad =
+        makeSample(units::degreesToRadians(rotation_deg), pros::c::micros(),
+                   std::isfinite(rotation_deg) && !inputs.imu.calibrating);
 
-  const pros::imu_gyro_s_t gyro =
-      pros::c::imu_get_gyro_rate(hardware_.imu_port);
-  inputs.imu.yaw_rate_radps =
-      makeSample(units::degreesToRadians(gyro.z), pros::c::micros(),
-                 std::isfinite(gyro.z) && !inputs.imu.calibrating);
+    const pros::imu_gyro_s_t gyro =
+        pros::c::imu_get_gyro_rate(hardware_.imu.smart_port);
+    inputs.imu.yaw_rate_radps =
+        makeSample(units::degreesToRadians(gyro.z), pros::c::micros(),
+                   std::isfinite(gyro.z) && !inputs.imu.calibrating);
+  } else {
+    const TimeUs now_us = pros::c::micros();
+    inputs.imu.status_api_ok = false;
+    inputs.imu.calibrating = false;
+    inputs.imu.rotation_rad = makeSample(0.0, now_us, false);
+    inputs.imu.yaw_rate_radps = makeSample(0.0, now_us, false);
+  }
 
   const std::int32_t battery_mV = pros::c::battery_get_voltage();
   inputs.battery_V =

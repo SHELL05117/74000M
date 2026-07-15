@@ -45,7 +45,7 @@ selected_route = DoNothing
 | IMU 端口和安装方向 | 计划值 | 端口识别、人工 CCW 旋转 | 航向正号和安装变换 |
 | Rotation Sensor 端口/反向 | 计划值 | 人工正向转轮 | tracking wheel 正号 |
 | 驱动轮型号和名义直径 | CAD/型号 | 实物测量并记录磨损/压缩 | 名义几何起点 |
-| 传动关系 | CAD/齿数 | 数齿、标记转数检查 | `motor_rev_per_wheel_rev` |
+| 传动关系 | CAD/齿数 | 数齿、标记转数检查 | 每个 `MotorPortConfig::motor_rev_per_wheel_rev` |
 | 名义轮距 | CAD/估计 | 安装完成后实测 | 有效轮距初值 |
 | tracking wheel 半径和外参 | CAD/估计 | 实测接触点与测量轴 | 里程计初值 |
 | robot ID / hardware revision | 计划值 | 与实机标签核对 | 配置和日志身份 |

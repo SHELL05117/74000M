@@ -1,18 +1,18 @@
-# Offline hardware manifest for 74000M.
+# Commissioning hardware manifest for the 1690X sample chassis.
 #
-# Only the six drivetrain motor facts below have been supplied. Every remaining
-# null must still come from the wiring table, CAD, physical inspection, or a
-# calibration record. The supplied direction flag means true=forward, while the
-# runtime field is reversed, so reversed = !supplied_forward. Runtime code must
-# keep every capability locked while verification.hardware is not HILValidated
-# or better.
+# Ports, cartridges, direction flags, drive-wheel size, nominal track width and
+# tooth paths were supplied by the operator. Calibration fields remain null.
+# The supplied direction flag means true=forward, while the runtime field is
+# reversed, so reversed = !supplied_forward. Official capabilities remain
+# locked while verification.hardware is not HILValidated or better.
 
 identity:
-  schema_version: 1
+  schema_version: 2
   calibration_revision: 0
-  robot_id: "UNVERIFIED_74000M"
+  team_number: "1690X"
+  robot_id: "1690X"
   hardware_revision: null
-  wheel_and_gearing: "UNVERIFIED"
+  wheel_and_gearing: "2.75in wheel; mixed 6:1 and 18:1 cartridges; nominal 450 wheel rpm"
 
 platform:
   framework: "PROS"
@@ -31,31 +31,32 @@ coordinate_contract:
 
 hardware:
   left_drive:
-    - { smart_port: 11, reversed: true,  cartridge_rpm: 600 } # Motor_DT_LA; supplied_forward=false; ratio6_1
-    - { smart_port: 12, reversed: false, cartridge_rpm: 200 } # Motor_DT_LM; supplied_forward=true;  ratio18_1
-    - { smart_port: 13, reversed: false, cartridge_rpm: 600 } # Motor_DT_LB; supplied_forward=true;  ratio6_1
+    - { smart_port: 11, reversed: true,  cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # LA; 36T -> 48T
+    - { smart_port: 12, reversed: false, cartridge_rpm: 200, motor_rev_per_wheel_rev: 0.4444444444444444 } # LM; 36T -> 12T, coaxial 36T -> 48T
+    - { smart_port: 13, reversed: false, cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # LB; 36T -> 48T
   right_drive:
-    - { smart_port: 1, reversed: false, cartridge_rpm: 600 } # Motor_DT_RA; supplied_forward=true;  ratio6_1
-    - { smart_port: 2, reversed: true,  cartridge_rpm: 200 } # Motor_DT_RM; supplied_forward=false; ratio18_1
-    - { smart_port: 3, reversed: true,  cartridge_rpm: 600 } # Motor_DT_RB; supplied_forward=false; ratio6_1
+    - { smart_port: 1, reversed: false, cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # RA; 36T -> 48T
+    - { smart_port: 2, reversed: true,  cartridge_rpm: 200, motor_rev_per_wheel_rev: 0.4444444444444444 } # RM; 36T -> 12T, coaxial 36T -> 48T
+    - { smart_port: 3, reversed: true,  cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # RB; 36T -> 48T
   imu:
+    installed: false
     smart_port: null
-    mounting: null
+    mounting: "not installed"
   parallel_rotation:
-    installed: null
+    installed: false
     smart_port: null
     reversed: null
     offset_y_m: null
   lateral_rotation:
-    installed: null
+    installed: false
     smart_port: null
     reversed: null
     offset_x_m: null
 
 geometry:
-  nominal_drive_wheel_diameter_m: null
-  motor_rev_per_wheel_rev: null
-  nominal_track_width_m: null
+  nominal_drive_wheel_diameter_m: 0.06985 # supplied 2.75 in
+  nominal_track_width_m: 0.1524          # supplied SolidWorks 6 in
+  source: "operator/CAD; not field calibrated"
 
 calibration:
   left_m_per_motor_rad: null
@@ -78,3 +79,10 @@ capabilities:
   autonomous_motion: false
   competition_routes: false
   selected_route: "DoNothing"
+
+commissioning_test:
+  enabled_in_non_field_opcontrol: true
+  maximum_voltage_V: 4.0
+  controller_mapping: "Left Y throttle; Left X turn; single-stick Arcade"
+  arm: "hold L1+L2+R1+R2 for 1 s at neutral, then release"
+  emergency_stop: "B; latched until mode epoch changes"

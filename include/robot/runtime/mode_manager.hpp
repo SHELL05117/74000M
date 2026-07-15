@@ -20,14 +20,17 @@ class ModeManager {
   }
 
   bool transitionTo(CompetitionMode next, TimeUs now_us,
-                    std::uint32_t fault_bits = 0) {
+                    std::uint32_t fault_bits = 0,
+                    bool field_connected = false) {
     const ModeSnapshot previous = store_.read();
-    if (previous.mode == next && previous.fault_bits == fault_bits) return false;
+    if (previous.mode == next && previous.fault_bits == fault_bits &&
+        previous.field_connected == field_connected)
+      return false;
 
     ModeSnapshot entering{};
     entering.mode = next;
     entering.enabled = false;
-    entering.field_connected = previous.field_connected;
+    entering.field_connected = field_connected;
     entering.epoch = previous.epoch + 1;
     entering.transition_time_us = now_us;
     entering.fault_bits = fault_bits;

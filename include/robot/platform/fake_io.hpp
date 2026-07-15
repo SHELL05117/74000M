@@ -51,6 +51,7 @@ class FakeDriveIO final : public DriveIO {
   }
 
   bool beginImuCalibration() override {
+    if (!hardware_.imu.installed) return false;
     imu_calibrating_ = true;
     return initialized_;
   }
@@ -66,12 +67,14 @@ class FakeDriveIO final : public DriveIO {
                 right_command_V_, right_fault_mask_ & (1u << i),
                 header.time_us);
     }
+    const bool imu_ok = hardware_.imu.installed && !imu_failed_ &&
+                        !imu_calibrating_;
     raw.imu.rotation_rad =
-        {imu_rotation_rad_, header.time_us, !imu_failed_ && !imu_calibrating_, 0};
+        {imu_rotation_rad_, header.time_us, imu_ok, 0};
     raw.imu.yaw_rate_radps =
-        {imu_rate_radps_, header.time_us, !imu_failed_ && !imu_calibrating_, 0};
-    raw.imu.calibrating = imu_calibrating_;
-    raw.imu.status_api_ok = !imu_failed_;
+        {imu_rate_radps_, header.time_us, imu_ok, 0};
+    raw.imu.calibrating = hardware_.imu.installed && imu_calibrating_;
+    raw.imu.status_api_ok = hardware_.imu.installed && !imu_failed_;
     raw.battery_V = {model_.battery_V, header.time_us, true, 0};
     raw.acquisition_end_us = header.time_us;
     return raw;
