@@ -26,6 +26,7 @@ if(BUILD_TESTING)
         tests/test_pose2d.cpp
         tests/test_config.cpp
         tests/test_contracts.cpp
+        tests/test_hal_contract.cpp
     )
     target_link_libraries(robot_tests PRIVATE robot_core)
     target_include_directories(robot_tests PRIVATE tests)
