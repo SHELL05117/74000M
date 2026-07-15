@@ -1,0 +1,78 @@
+# Offline hardware manifest for 74000M.
+#
+# This file deliberately contains no guessed final hardware values. Replace each
+# null only from the wiring table, CAD, physical inspection, or a calibration
+# record. Runtime code must keep every capability locked while
+# verification.hardware is not HILValidated or better.
+
+identity:
+  schema_version: 1
+  calibration_revision: 0
+  robot_id: "UNVERIFIED_74000M"
+  hardware_revision: null
+  wheel_and_gearing: "UNVERIFIED"
+
+platform:
+  framework: "PROS"
+  kernel_version: "4.2.2"
+  language_standard: "C++17"
+  nominal_control_period_ms: 10
+
+coordinate_contract:
+  body_x_positive: "forward"
+  body_y_positive: "left"
+  theta_positive: "counter_clockwise_from_above"
+  linear_unit: "metre"
+  angular_unit: "radian"
+  time_interval_unit: "second"
+  voltage_unit: "volt"
+
+hardware:
+  left_drive:
+    - { smart_port: null, reversed: null, cartridge_rpm: null }
+    - { smart_port: null, reversed: null, cartridge_rpm: null }
+    - { smart_port: null, reversed: null, cartridge_rpm: null }
+  right_drive:
+    - { smart_port: null, reversed: null, cartridge_rpm: null }
+    - { smart_port: null, reversed: null, cartridge_rpm: null }
+    - { smart_port: null, reversed: null, cartridge_rpm: null }
+  imu:
+    smart_port: null
+    mounting: null
+  parallel_rotation:
+    installed: null
+    smart_port: null
+    reversed: null
+    offset_y_m: null
+  lateral_rotation:
+    installed: null
+    smart_port: null
+    reversed: null
+    offset_x_m: null
+
+geometry:
+  nominal_drive_wheel_diameter_m: null
+  motor_rev_per_wheel_rev: null
+  nominal_track_width_m: null
+
+calibration:
+  left_m_per_motor_rad: null
+  right_m_per_motor_rad: null
+  effective_track_width_m: null
+
+verification:
+  implementation: "Implemented"
+  pc: "NotTested"
+  simulation: "NotTested"
+  hardware: "Unverified"
+  field: "Unverified"
+  competition: "Unverified"
+
+capabilities:
+  hardware_output: false
+  driver_control: false
+  pose_good: false
+  autonomous_chassis_velocity: false
+  autonomous_motion: false
+  competition_routes: false
+  selected_route: "DoNothing"
