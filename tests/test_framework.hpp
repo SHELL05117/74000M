@@ -1,8 +1,10 @@
 #pragma once
 
 #include <exception>
+#include <cmath>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace test {
@@ -42,6 +44,20 @@ inline void require(bool condition, const char* expression, const char* file,
                 ": requirement failed: " + expression);
 }
 
+inline void requireNear(double actual, double expected, double tolerance,
+                        const char* actual_expression,
+                        const char* expected_expression, const char* file,
+                        int line) {
+  if (std::isfinite(actual) && std::isfinite(expected) &&
+      std::abs(actual - expected) <= tolerance) {
+    return;
+  }
+  throw Failure(std::string(file) + ":" + std::to_string(line) +
+                ": expected " + actual_expression + " ~= " +
+                expected_expression + ", actual=" + std::to_string(actual) +
+                ", expected=" + std::to_string(expected));
+}
+
 inline int runAll() {
   int failures = 0;
   for (const auto& test_case : registry()) {
@@ -76,3 +92,7 @@ inline int runAll() {
 #define ROBOT_REQUIRE(expression)                                              \
   ::test::require(static_cast<bool>(expression), #expression, __FILE__,        \
                   __LINE__)
+
+#define ROBOT_REQUIRE_NEAR(actual, expected, tolerance)                        \
+  ::test::requireNear((actual), (expected), (tolerance), #actual, #expected,   \
+                      __FILE__, __LINE__)

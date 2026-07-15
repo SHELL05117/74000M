@@ -22,6 +22,10 @@ if(BUILD_TESTING)
     add_executable(robot_tests
         tests/test_main.cpp
         tests/test_build_info.cpp
+        tests/test_units.cpp
+        tests/test_pose2d.cpp
+        tests/test_config.cpp
+        tests/test_contracts.cpp
     )
     target_link_libraries(robot_tests PRIVATE robot_core)
     target_include_directories(robot_tests PRIVATE tests)

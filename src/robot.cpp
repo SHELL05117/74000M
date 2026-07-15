@@ -1,4 +1,4 @@
-#include "robot/core/build_info.hpp"
+#include "robot/robot.hpp"
 
 namespace robot {
 

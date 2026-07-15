@@ -1,0 +1,15 @@
+#pragma once
+
+#include "robot/config/robot_config.hpp"
+#include "robot/core/build_info.hpp"
+#include "robot/core/fault.hpp"
+#include "robot/core/frame.hpp"
+#include "robot/core/quality.hpp"
+#include "robot/core/snapshot_box.hpp"
+#include "robot/core/units.hpp"
+#include "robot/drive/actuator_frame.hpp"
+#include "robot/drive/drive_request.hpp"
+#include "robot/runtime/mode.hpp"
+#include "robot/state/pose2d.hpp"
+#include "robot/state/robot_state.hpp"
+#include "robot/ui/registry_ids.hpp"
