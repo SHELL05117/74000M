@@ -1,0 +1,4 @@
+interface:
+  display_name: "74000M Project Guide"
+  short_description: "Fast architecture and development guide for 74000M"
+  default_prompt: "Use $understand-74000m to orient yourself before changing the 74000M PROS project."
