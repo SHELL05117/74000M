@@ -15,3 +15,7 @@ temp.log
 temp.errors
 *.ini
 .d/
+
+# PC build and test output
+build/
+Testing/
