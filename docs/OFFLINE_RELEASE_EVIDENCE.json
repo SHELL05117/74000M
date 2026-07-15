@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "generated_utc": "2026-07-15T09:47:32.2867363Z",
+  "source_commit": "8b573049f1b14e59ff392a2ba5b88471c1f646fd",
+  "hardware_profile_sha256": "06bef70013fb50063d5ef6d319042fd8fe03d3e5789c538179ec8a33e135ca22",
+  "robot_id": "UNVERIFIED_74000M",
+  "calibration_revision": 0,
+  "pc_tests": "160/160 tests passed",
+  "ctest": "PASS",
+  "static_audit": "PASS",
+  "pros_cpp17_build": "PASS",
+  "fake_closed_loop": "PASS",
+  "scoped_worktree_clean": true,
+  "old_robot_logs": "NOT TESTED - no historical hardware logs supplied",
+  "hil": "NOT TESTED - robot unavailable",
+  "field": "NOT TESTED - robot unavailable",
+  "competition_approval": "NOT APPROVED",
+  "rollback_commit": "a9b97ef",
+  "capabilities_locked": true
+}
