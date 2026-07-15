@@ -87,3 +87,4 @@ Write-Output "core platform isolation: PASS"
 Write-Output "battery amplification guard: PASS"
 Write-Output "offline capabilities and DoNothing lock: PASS"
 Write-Output "language standard: PC/PROS C++17"
+exit 0

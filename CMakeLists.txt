@@ -38,6 +38,7 @@ if(BUILD_TESTING)
         tests/test_calibration.cpp
         tests/test_hmi.cpp
         tests/test_freeze_gate.cpp
+        tests/test_control_foundations.cpp
     )
     target_link_libraries(robot_tests PRIVATE robot_core)
     target_include_directories(robot_tests PRIVATE tests)

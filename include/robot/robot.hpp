@@ -1,6 +1,10 @@
 #pragma once
 
 #include "robot/config/robot_config.hpp"
+#include "robot/control/engineering_pid.hpp"
+#include "robot/control/feedforward.hpp"
+#include "robot/control/motion_profile.hpp"
+#include "robot/control/termination.hpp"
 #include "robot/commands/drive_request_arbiter.hpp"
 #include "robot/commands/request_sink.hpp"
 #include "robot/commands/scheduler.hpp"
