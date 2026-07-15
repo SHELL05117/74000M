@@ -4,6 +4,8 @@
 #include "robot/commands/drive_request_arbiter.hpp"
 #include "robot/commands/request_sink.hpp"
 #include "robot/commands/scheduler.hpp"
+#include "robot/calibration/calibration_tools.hpp"
+#include "robot/calibration/characterization_runner.hpp"
 #include "robot/core/build_info.hpp"
 #include "robot/core/fault.hpp"
 #include "robot/core/frame.hpp"
