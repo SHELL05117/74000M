@@ -68,7 +68,8 @@ ROBOT_TEST("commissioning Arcade drives immediately and neutral coasts") {
 ROBOT_TEST("commissioning cycle drives through Test safety gate at twelve volts") {
   const auto config = robot::make1690XCommissioningArcadeConfig();
   ROBOT_REQUIRE_NEAR(config.max_voltage_V, 12.0, 1e-12);
-  ROBOT_REQUIRE_NEAR(config.output_slew.rise_V_per_s, 36.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(config.throttle_rise_per_s, 20.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(config.output_slew.rise_V_per_s, 240.0, 1e-12);
   ROBOT_REQUIRE_NEAR(config.output_slew.fall_V_per_s, 72.0, 1e-12);
   robot::CommissioningControlCycle cycle(config);
   const auto mode = testMode();
@@ -79,17 +80,24 @@ ROBOT_TEST("commissioning cycle drives through Test safety gate at twelve volts"
                             controllerFor(start, 0, 1.0, 0.0),
                             timingFor(start));
   ROBOT_REQUIRE(frame.owner == robot::RequestSource::Test);
-  ROBOT_REQUIRE(frame.left_V > 0.0);
-  ROBOT_REQUIRE(frame.right_V > 0.0);
+  ROBOT_REQUIRE_NEAR(frame.left_V, 2.4, 1e-9);
+  ROBOT_REQUIRE_NEAR(frame.right_V, 2.4, 1e-9);
   ROBOT_REQUIRE(std::abs(frame.left_V) <= 12.0);
   ROBOT_REQUIRE(std::abs(frame.right_V) <= 12.0);
 
-  for (std::uint32_t i = 0; i < 40; ++i) {
+  for (std::uint32_t i = 0; i < 3; ++i) {
     const robot::FrameHeader full{20000 + i * 10000, 2 + i, 7};
     frame = cycle.update(full, mode, raw,
                          controllerFor(full, 0, 1.0, 0.0),
                          timingFor(full));
   }
+  ROBOT_REQUIRE_NEAR(frame.left_V, 9.6, 1e-9);
+  ROBOT_REQUIRE_NEAR(frame.right_V, 9.6, 1e-9);
+
+  const robot::FrameHeader full{50000, 5, 7};
+  frame = cycle.update(full, mode, raw,
+                       controllerFor(full, 0, 1.0, 0.0),
+                       timingFor(full));
   ROBOT_REQUIRE_NEAR(frame.left_V, 12.0, 1e-9);
   ROBOT_REQUIRE_NEAR(frame.right_V, 12.0, 1e-9);
 }

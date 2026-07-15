@@ -36,7 +36,7 @@ inline CommissioningArcadeConfig make1690XCommissioningArcadeConfig() {
   CommissioningArcadeConfig config{};
   config.throttle_shape = {0.0, 0.06, 0.15};
   config.turn_shape = {0.0, 0.06, 0.15};
-  config.throttle_rise_per_s = 3.0;
+  config.throttle_rise_per_s = 20.0;
   config.throttle_fall_per_s = 6.0;
   config.turn_rise_per_s = 4.0;
   config.turn_fall_per_s = 8.0;
@@ -44,8 +44,9 @@ inline CommissioningArcadeConfig make1690XCommissioningArcadeConfig() {
   config.max_voltage_V = 12.0;
   config.request_ttl_us = 30000;
   config.coast_button = kButtonB;
-  // Matches the 3/s throttle rise and 6/s fall at the 12 V ceiling.
-  config.output_slew = {36.0, 72.0, 0.05};
+  // Fast HIL candidate: full forward reaches the legal 12 V command ceiling
+  // in about 50 ms. Falling/reversal behavior stays conservative.
+  config.output_slew = {240.0, 72.0, 0.05};
   return config;
 }
 

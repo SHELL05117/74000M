@@ -85,8 +85,17 @@ capabilities:
 
 commissioning_test:
   enabled_in_non_field_opcontrol: true
+  tuning_revision: 2
   maximum_voltage_V: 12.0
   controller_mapping: "Left Y throttle; Left X turn; single-stick Arcade"
   arming: "none; drive is active immediately in non-field opcontrol"
   coast_button: "B; hold for immediate Coast, release to resume stick control"
   zero_behavior: "Coast for neutral, B, disabled, disconnect, request stale, and output stale"
+  throttle_rise_per_s: 20.0
+  throttle_fall_per_s: 6.0
+  turn_rise_per_s: 4.0
+  turn_fall_per_s: 8.0
+  output_rise_V_per_s: 240.0
+  output_fall_V_per_s: 72.0
+  nominal_full_throttle_ramp_s: 0.05
+  tuning_status: "HIL candidate after the 3/s input and 36 V/s output rise felt slow; retest required"
