@@ -2,6 +2,7 @@
 
 #include "robot/autonomy/motion_commands.hpp"
 #include "robot/autonomy/route_registry.hpp"
+#include "robot/autonomy/safety_supervisor.hpp"
 #include "robot/autonomy/trajectory.hpp"
 #include "robot/autonomy/trajectory_tracker.hpp"
 #include "robot/config/robot_config.hpp"
