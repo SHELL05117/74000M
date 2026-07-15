@@ -28,6 +28,7 @@ if(BUILD_TESTING)
         tests/test_contracts.cpp
         tests/test_hal_contract.cpp
         tests/test_runtime.cpp
+        tests/test_telemetry.cpp
     )
     target_link_libraries(robot_tests PRIVATE robot_core)
     target_include_directories(robot_tests PRIVATE tests)
