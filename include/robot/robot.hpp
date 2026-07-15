@@ -1,6 +1,7 @@
 #pragma once
 
 #include "robot/autonomy/motion_commands.hpp"
+#include "robot/autonomy/route_registry.hpp"
 #include "robot/autonomy/trajectory.hpp"
 #include "robot/autonomy/trajectory_tracker.hpp"
 #include "robot/config/robot_config.hpp"
@@ -10,6 +11,8 @@
 #include "robot/control/motion_profile.hpp"
 #include "robot/control/termination.hpp"
 #include "robot/commands/drive_request_arbiter.hpp"
+#include "robot/commands/command_groups.hpp"
+#include "robot/commands/mechanism_commands.hpp"
 #include "robot/commands/request_sink.hpp"
 #include "robot/commands/scheduler.hpp"
 #include "robot/calibration/calibration_tools.hpp"

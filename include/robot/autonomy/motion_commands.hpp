@@ -124,7 +124,7 @@ class AutonomousMotionCommandBase : public Command {
     last_brake_sequence_ = 0;
     initialized_ = false;
     if (!validMotionPrimitiveConfig(config_) || context.state == nullptr ||
-        owner.command_id != id_ ||
+        owner.command_id == 0 ||
         (owner.requirements & Requirement::kDrivetrain) == 0 ||
         owner.mode_epoch != context.mode.epoch ||
         !validContext(context, requiresTranslation(), requiresHeading()) ||

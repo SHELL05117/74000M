@@ -133,7 +133,7 @@ class StaticScheduler final : public LeaseAuthority {
   ScheduleResult schedule(Command& command, const CommandContext& context,
                           ConflictPolicy policy) noexcept {
     ScheduleResult result{};
-    if (command.id() == 0 || command.requirements() == 0) {
+    if (command.id() == 0) {
       result.reject_bits |= kScheduleBadCommand;
       return result;
     }
