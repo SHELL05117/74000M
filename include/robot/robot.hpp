@@ -1,6 +1,7 @@
 #pragma once
 
 #include "robot/config/robot_config.hpp"
+#include "robot/control/chassis_velocity_controller.hpp"
 #include "robot/control/engineering_pid.hpp"
 #include "robot/control/feedforward.hpp"
 #include "robot/control/motion_profile.hpp"

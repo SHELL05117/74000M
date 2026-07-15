@@ -103,7 +103,7 @@ class DriveRequestArbiter {
     }
     if (!sourceAllowed(request.source, mode.mode))
       reject |= kArbitrationWrongSource;
-    if (!supportedPayload(request.payload, capabilities))
+    if (!supportedPayload(request.payload, capabilities, request.source))
       reject |= kArbitrationUnsupported;
     if (!authority.owns(request.owner) ||
         (request.owner.requirements & Requirement::kDrivetrain) == 0)

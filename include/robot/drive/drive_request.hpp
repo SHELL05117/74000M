@@ -134,4 +134,20 @@ inline bool supportedPayload(const DrivePayload& payload,
   return true;
 }
 
+inline bool supportedPayload(const DrivePayload& payload,
+                             const DriveCapabilities& capabilities,
+                             RequestSource source) noexcept {
+  if (std::holds_alternative<DriverCurvaturePayload>(payload))
+    return source == RequestSource::Driver && capabilities.driver_curvature;
+  if (std::holds_alternative<ChassisVelocityPayload>(payload))
+    return source == RequestSource::FutureAutonomy &&
+           capabilities.autonomous_chassis_velocity;
+  if (std::holds_alternative<WheelVoltagePayload>(payload))
+    return (source == RequestSource::Test &&
+            capabilities.controlled_test_voltage) ||
+           (source == RequestSource::FutureAutonomy &&
+            capabilities.autonomous_chassis_velocity);
+  return std::holds_alternative<BrakePayload>(payload);
+}
+
 }  // namespace robot

@@ -75,7 +75,8 @@ class SafetyGate {
       return stopFrame(input.output_header, config_.fault_stop_mode,
                        kAppliedInvalidRequestStop);
     }
-    if (!supportedPayload(request->payload, input.capabilities) ||
+    if (!supportedPayload(request->payload, input.capabilities,
+                          request->source) ||
         std::holds_alternative<ChassisVelocityPayload>(request->payload)) {
       resetForStop(input.mode.epoch);
       return stopFrame(input.output_header, config_.fault_stop_mode,
