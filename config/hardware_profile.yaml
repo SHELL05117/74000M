@@ -62,7 +62,7 @@ calibration:
 
 verification:
   implementation: "Implemented"
-  pc: "NotTested"
+  pc: "PCValidated"
   simulation: "NotTested"
   hardware: "Unverified"
   field: "Unverified"
