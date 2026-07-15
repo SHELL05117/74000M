@@ -1,6 +1,9 @@
 #pragma once
 
 #include "robot/config/robot_config.hpp"
+#include "robot/commands/drive_request_arbiter.hpp"
+#include "robot/commands/request_sink.hpp"
+#include "robot/commands/scheduler.hpp"
 #include "robot/core/build_info.hpp"
 #include "robot/core/fault.hpp"
 #include "robot/core/frame.hpp"
