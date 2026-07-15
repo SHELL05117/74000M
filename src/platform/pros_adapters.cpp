@@ -109,6 +109,19 @@ ControllerSnapshot ProsControllerIO::readOnce(const FrameHeader& header) {
   return snapshot;
 }
 
+bool ProsControllerDisplayIO::writeLine(std::uint8_t row,
+                                        const char* text) {
+  if (row >= 3 || text == nullptr) return false;
+  return pros::c::controller_set_text(pros::E_CONTROLLER_MASTER, row, 0,
+                                      text) != PROS_ERR;
+}
+
+bool ProsControllerDisplayIO::rumble(const char* pattern) {
+  if (pattern == nullptr) return false;
+  return pros::c::controller_rumble(pros::E_CONTROLLER_MASTER, pattern) !=
+         PROS_ERR;
+}
+
 ProsDriveIO::ProsDriveIO(const RobotConfig& config,
                          const char* expected_robot_id,
                          std::uint32_t expected_schema)

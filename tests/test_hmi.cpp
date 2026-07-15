@@ -9,6 +9,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 
 namespace {
 
@@ -108,6 +109,27 @@ class MemorySlot final : public robot::ParameterProfileSlot {
   std::array<std::uint8_t, 128> bytes_{};
   std::size_t size_{};
   bool written_{};
+};
+
+class FakeControllerDisplay final : public robot::ControllerDisplayIO {
+ public:
+  bool writeLine(std::uint8_t row, const char* text) override {
+    if (row >= lines.size() || text == nullptr) return false;
+    robot::controllerLine(lines[row], "%s", text);
+    ++write_count;
+    return true;
+  }
+
+  bool rumble(const char*) override {
+    ++rumble_count;
+    return true;
+  }
+
+  std::array<std::array<char, robot::kControllerColumnsWithTerminator>,
+             robot::kControllerRows>
+      lines{};
+  std::uint32_t write_count{};
+  std::uint32_t rumble_count{};
 };
 
 robot::ModeSnapshot disabledMode(bool field_connected = false) {
@@ -274,4 +296,33 @@ ROBOT_TEST("controller frames are fixed printable ASCII and brain targets fit") 
       ROBOT_REQUIRE(robot::printableAsciiLine(line));
   }
   ROBOT_REQUIRE(robot::validBrainLayout(robot::BrainLayout{}));
+}
+
+ROBOT_TEST("pose-only controller frame shows ERR for missing pose sensors") {
+  robot::HmiModel model{};
+  model.pose = {1.0, 2.0, 0.5};
+  model.translation_quality = robot::Quality::Invalid;
+  model.heading_quality = robot::Quality::Invalid;
+  const auto frame = robot::formatPoseControllerFrame(model);
+  ROBOT_REQUIRE(std::strcmp(frame.lines[0].data(), "X:ERR") == 0);
+  ROBOT_REQUIRE(std::strcmp(frame.lines[1].data(), "Y:ERR") == 0);
+  ROBOT_REQUIRE(std::strcmp(frame.lines[2].data(), "H:ERR") == 0);
+}
+
+ROBOT_TEST("pose-only renderer rate limits output to one changed row") {
+  robot::HmiModel model{};
+  model.pose = {1.0, -2.0, robot::units::degreesToRadians(90.0)};
+  model.translation_quality = robot::Quality::Good;
+  model.heading_quality = robot::Quality::Good;
+  FakeControllerDisplay display;
+  robot::ControllerPoseRenderer renderer;
+  ROBOT_REQUIRE(renderer.tick(model, display));
+  ROBOT_REQUIRE(display.write_count == 1);
+  ROBOT_REQUIRE(renderer.tick(model, display));
+  ROBOT_REQUIRE(display.write_count == 2);
+  ROBOT_REQUIRE(renderer.tick(model, display));
+  ROBOT_REQUIRE(display.write_count == 3);
+  ROBOT_REQUIRE(!renderer.tick(model, display));
+  ROBOT_REQUIRE(display.write_count == 3);
+  ROBOT_REQUIRE(std::strcmp(display.lines[2].data(), "H:+90.0deg") == 0);
 }

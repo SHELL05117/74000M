@@ -7,8 +7,198 @@
 
 #include "robot/config/robot_config.hpp"
 #include "robot/core/frame.hpp"
+#include "robot/state/raw_inputs.hpp"
 
 namespace robot {
+
+constexpr TimeUs kMinimumStartupSelfCheckUs = 3000000;
+
+enum StartupSelfCheckFault : std::uint32_t {
+  kStartupSelfCheckOk = 0,
+  kStartupBadConfig = 1u << 0,
+  kStartupDriveInitializeFailed = 1u << 1,
+  kStartupMotorMissing = 1u << 2,
+  kStartupMotorFault = 1u << 3,
+  kStartupBatteryInvalid = 1u << 4,
+  kStartupImuMissing = 1u << 5,
+  kStartupImuCalibrationFailed = 1u << 6,
+  kStartupImuInvalid = 1u << 7,
+  kStartupTrackingSensorMissing = 1u << 8,
+};
+
+struct StartupSelfCheckConfig {
+  TimeUs minimum_duration_us{kMinimumStartupSelfCheckUs};
+  TimeUs sensor_timeout_us{5000000};
+};
+
+struct StartupSelfCheckStatus {
+  bool started{};
+  bool complete{};
+  bool healthy{};
+  std::uint32_t fault_bits{};
+  TimeUs elapsed_us{};
+};
+
+// Passive startup validation only. It never writes a motor and it deliberately
+// waits for repeated HAL samples so a transient API error does not masquerade
+// as a missing device. Known-impossible conditions (for example no configured
+// IMU) still observe the mandatory three-second startup dwell.
+class StartupSelfCheck {
+ public:
+  explicit StartupSelfCheck(StartupSelfCheckConfig config = {}) noexcept
+      : config_(config) {
+    if (config_.minimum_duration_us < kMinimumStartupSelfCheckUs)
+      config_.minimum_duration_us = kMinimumStartupSelfCheckUs;
+    if (config_.sensor_timeout_us < config_.minimum_duration_us)
+      config_.sensor_timeout_us = config_.minimum_duration_us;
+  }
+
+  void begin(TimeUs now_us, const HardwareConfig& hardware,
+             bool config_valid, bool drive_initialized,
+             bool imu_calibration_started) noexcept {
+    hardware_ = hardware;
+    start_time_us_ = now_us;
+    status_ = {};
+    status_.started = true;
+    motor_seen_.fill(false);
+    tracking_seen_.fill(false);
+    battery_seen_ = false;
+    imu_seen_ = false;
+    motor_fault_seen_ = false;
+
+    if (!config_valid) status_.fault_bits |= kStartupBadConfig;
+    if (!drive_initialized)
+      status_.fault_bits |= kStartupDriveInitializeFailed;
+    if (!hardware_.imu.installed) {
+      status_.fault_bits |= kStartupImuMissing;
+    } else if (!imu_calibration_started) {
+      status_.fault_bits |= kStartupImuCalibrationFailed;
+    }
+  }
+
+  StartupSelfCheckStatus tick(TimeUs now_us,
+                              const RawDriveInputs& raw) noexcept {
+    if (!status_.started || status_.complete) return status_;
+    status_.elapsed_us =
+        now_us >= start_time_us_ ? now_us - start_time_us_ : 0;
+
+    observeMotors(raw.left.motor, hardware_.left, 0);
+    observeMotors(raw.right.motor, hardware_.right, kMotorsPerSide);
+    battery_seen_ = battery_seen_ || validScalar(raw.battery_V);
+
+    if (hardware_.imu.installed &&
+        (status_.fault_bits & kStartupImuCalibrationFailed) == 0) {
+      const bool imu_valid = raw.imu.status_api_ok && !raw.imu.calibrating &&
+                             validScalar(raw.imu.rotation_rad) &&
+                             validScalar(raw.imu.yaw_rate_radps);
+      imu_seen_ = imu_seen_ || imu_valid;
+    }
+
+    observeTracking(raw, hardware_.parallel_rotation, 0);
+    observeTracking(raw, hardware_.lateral_rotation, 1);
+
+    const bool reached_minimum =
+        status_.elapsed_us >= config_.minimum_duration_us;
+    const bool reached_timeout =
+        status_.elapsed_us >= config_.sensor_timeout_us;
+    const bool known_impossible =
+        (status_.fault_bits & (kStartupBadConfig |
+                               kStartupDriveInitializeFailed |
+                               kStartupImuMissing |
+                               kStartupImuCalibrationFailed)) != 0;
+    const bool all_observed = allRequiredDevicesObserved();
+    if (!reached_minimum || (!all_observed && !known_impossible &&
+                             !reached_timeout)) {
+      return status_;
+    }
+
+    finalizeFaults();
+    status_.complete = true;
+    status_.healthy = status_.fault_bits == kStartupSelfCheckOk;
+    return status_;
+  }
+
+  StartupSelfCheckStatus status() const noexcept { return status_; }
+
+ private:
+  static bool validScalar(const ScalarSample& sample) noexcept {
+    return sample.api_ok && std::isfinite(sample.value);
+  }
+
+  static bool validMotor(const MotorSample& sample,
+                         const MotorPortConfig& expected) noexcept {
+    return sample.smart_port ==
+               static_cast<std::uint8_t>(expected.smart_port) &&
+           validScalar(sample.position_rad) &&
+           validScalar(sample.velocity_radps) &&
+           validScalar(sample.current_A) &&
+           validScalar(sample.temperature_C) &&
+           validScalar(sample.applied_voltage_V) && sample.faults_api_ok;
+  }
+
+  template <std::size_t N>
+  void observeMotors(const std::array<MotorSample, N>& samples,
+                     const std::array<MotorPortConfig, N>& expected,
+                     std::size_t offset) noexcept {
+    for (std::size_t i = 0; i < N; ++i) {
+      motor_seen_[offset + i] =
+          motor_seen_[offset + i] || validMotor(samples[i], expected[i]);
+      motor_fault_seen_ =
+          motor_fault_seen_ ||
+          (samples[i].faults_api_ok && samples[i].faults != 0);
+    }
+  }
+
+  void observeTracking(const RawDriveInputs& raw,
+                       const RotationSensorConfig& expected,
+                       std::size_t index) noexcept {
+    if (!expected.installed || index >= raw.tracking.size()) return;
+    const TrackingWheelRaw& sample = raw.tracking[index];
+    tracking_seen_[index] =
+        tracking_seen_[index] ||
+        (sample.configured && validScalar(sample.position_rad) &&
+         validScalar(sample.velocity_radps));
+  }
+
+  bool allRequiredDevicesObserved() const noexcept {
+    for (const bool seen : motor_seen_)
+      if (!seen) return false;
+    if (!battery_seen_) return false;
+    if (hardware_.imu.installed && !imu_seen_) return false;
+    if (hardware_.parallel_rotation.installed && !tracking_seen_[0])
+      return false;
+    if (hardware_.lateral_rotation.installed && !tracking_seen_[1])
+      return false;
+    return true;
+  }
+
+  void finalizeFaults() noexcept {
+    for (const bool seen : motor_seen_) {
+      if (!seen) {
+        status_.fault_bits |= kStartupMotorMissing;
+        break;
+      }
+    }
+    if (motor_fault_seen_) status_.fault_bits |= kStartupMotorFault;
+    if (!battery_seen_) status_.fault_bits |= kStartupBatteryInvalid;
+    if (hardware_.imu.installed && !imu_seen_)
+      status_.fault_bits |= kStartupImuInvalid;
+    if ((hardware_.parallel_rotation.installed && !tracking_seen_[0]) ||
+        (hardware_.lateral_rotation.installed && !tracking_seen_[1])) {
+      status_.fault_bits |= kStartupTrackingSensorMissing;
+    }
+  }
+
+  StartupSelfCheckConfig config_{};
+  HardwareConfig hardware_{};
+  StartupSelfCheckStatus status_{};
+  TimeUs start_time_us_{};
+  std::array<bool, 2 * kMotorsPerSide> motor_seen_{};
+  std::array<bool, 2> tracking_seen_{};
+  bool battery_seen_{};
+  bool imu_seen_{};
+  bool motor_fault_seen_{};
+};
 
 enum class DirectionTestState : std::uint8_t {
   Locked,

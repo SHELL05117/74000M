@@ -27,6 +27,12 @@ class ProsControllerIO final : public ControllerIO {
   ControllerSnapshot readOnce(const FrameHeader& header) override;
 };
 
+class ProsControllerDisplayIO final : public ControllerDisplayIO {
+ public:
+  bool writeLine(std::uint8_t row, const char* text) override;
+  bool rumble(const char* pattern) override;
+};
+
 class ProsDriveIO final : public DriveIO {
  public:
   ProsDriveIO(const RobotConfig& config, const char* expected_robot_id,

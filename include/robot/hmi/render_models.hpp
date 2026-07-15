@@ -1,12 +1,15 @@
 #pragma once
 
 #include <array>
+#include <cmath>
 #include <cstdarg>
 #include <cstddef>
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 
 #include "robot/hmi/types.hpp"
+#include "robot/platform/io.hpp"
 
 namespace robot {
 
@@ -138,6 +141,66 @@ inline ControllerFrame formatControllerFrame(const HmiModel& model) noexcept {
   }
   return frame;
 }
+
+inline ControllerFrame formatPoseControllerFrame(
+    const HmiModel& model) noexcept {
+  ControllerFrame frame{};
+  frame.model_sequence = model.h.sequence;
+  const bool translation_valid =
+      model.translation_quality != Quality::Invalid &&
+      std::isfinite(model.pose.x_m) && std::isfinite(model.pose.y_m);
+  const bool heading_valid = model.heading_quality != Quality::Invalid &&
+                             std::isfinite(model.pose.theta_rad);
+
+  if (translation_valid) {
+    controllerLine(frame.lines[0], "X:%+.3fm", model.pose.x_m);
+    controllerLine(frame.lines[1], "Y:%+.3fm", model.pose.y_m);
+  } else {
+    controllerLine(frame.lines[0], "X:ERR");
+    controllerLine(frame.lines[1], "Y:ERR");
+  }
+  if (heading_valid) {
+    controllerLine(frame.lines[2], "H:%+.1fdeg",
+                   model.pose.theta_rad / units::kRadPerDeg);
+  } else {
+    controllerLine(frame.lines[2], "H:ERR");
+  }
+  return frame;
+}
+
+// Sends at most one changed row per tick. This respects the controller's slow
+// text transport and also prevents screen traffic from occupying the 10 ms
+// control path.
+class ControllerPoseRenderer {
+ public:
+  bool tick(const HmiModel& model, ControllerDisplayIO& io) noexcept {
+    const ControllerFrame target = formatPoseControllerFrame(model);
+    for (std::size_t offset = 0; offset < kControllerRows; ++offset) {
+      const std::size_t row = (next_row_ + offset) % kControllerRows;
+      if (initialized_rows_[row] &&
+          std::strncmp(last_.lines[row].data(), target.lines[row].data(),
+                       kControllerColumnsWithTerminator) == 0) {
+        continue;
+      }
+      if (!io.writeLine(static_cast<std::uint8_t>(row),
+                        target.lines[row].data())) {
+        return false;
+      }
+      next_row_ = (row + 1) % kControllerRows;
+      last_.lines[row] = target.lines[row];
+      last_.model_sequence = target.model_sequence;
+      initialized_rows_[row] = true;
+      return true;
+    }
+    last_.model_sequence = target.model_sequence;
+    return false;
+  }
+
+ private:
+  ControllerFrame last_{};
+  std::array<bool, kControllerRows> initialized_rows_{};
+  std::size_t next_row_{};
+};
 
 struct BrainRect {
   std::int16_t x{};

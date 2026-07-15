@@ -25,6 +25,13 @@ class ControllerIO {
   virtual ~ControllerIO() = default;
 };
 
+class ControllerDisplayIO {
+ public:
+  virtual bool writeLine(std::uint8_t row, const char* text) = 0;
+  virtual bool rumble(const char* pattern) = 0;
+  virtual ~ControllerDisplayIO() = default;
+};
+
 class CompetitionIO {
  public:
   virtual CompetitionSnapshot readOnce(const FrameHeader& header) = 0;
