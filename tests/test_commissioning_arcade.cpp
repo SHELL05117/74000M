@@ -1,4 +1,7 @@
 #include "robot/manual/commissioning_arcade.hpp"
+#include "robot/config/robot_config.hpp"
+#include "robot/drive/output_service.hpp"
+#include "robot/platform/fake_io.hpp"
 #include "test_framework.hpp"
 
 #include <cmath>
@@ -34,37 +37,32 @@ robot::TimingSample timingFor(const robot::FrameHeader& header) {
 
 }  // namespace
 
-ROBOT_TEST("commissioning Arcade requires neutral hold and chord release") {
+ROBOT_TEST("commissioning Arcade drives immediately and neutral coasts") {
   const auto config = robot::make1690XCommissioningArcadeConfig();
   robot::CommissioningArcadeMapper mapper(config);
   const robot::OwnerToken owner{42, robot::Requirement::kDrivetrain, 3, 7};
   const auto mode = testMode();
 
   const robot::FrameHeader start{10000, 1, 7};
-  auto result = mapper.update(start, mode,
-                              controllerFor(start, config.arm_chord), 0.01,
-                              owner);
-  ROBOT_REQUIRE(!result.valid);
-  ROBOT_REQUIRE(result.state ==
-                robot::CommissioningDriveState::HoldingArmChord);
-
-  const robot::FrameHeader held{1010000, 2, 7};
-  result = mapper.update(held, mode,
-                         controllerFor(held, config.arm_chord), 0.01, owner);
-  ROBOT_REQUIRE(!result.valid);
-  ROBOT_REQUIRE(result.state ==
-                robot::CommissioningDriveState::AwaitingChordRelease);
-
-  const robot::FrameHeader released{1020000, 3, 7};
-  result = mapper.update(released, mode, controllerFor(released), 0.01, owner);
+  auto result = mapper.update(
+      start, mode, controllerFor(start, 0, 1.0, 0.0), 0.01, owner);
   ROBOT_REQUIRE(result.valid);
-  ROBOT_REQUIRE(result.state == robot::CommissioningDriveState::Armed);
+  ROBOT_REQUIRE(result.state == robot::CommissioningDriveState::Driving);
   ROBOT_REQUIRE(result.request.source == robot::RequestSource::Test);
-  const auto* stopped =
+  const auto* driving =
       std::get_if<robot::WheelVoltagePayload>(&result.request.payload);
+  ROBOT_REQUIRE(driving != nullptr);
+  ROBOT_REQUIRE(driving->left_V > 0.0);
+  ROBOT_REQUIRE(driving->right_V > 0.0);
+
+  const robot::FrameHeader neutral{20000, 2, 7};
+  result = mapper.update(neutral, mode, controllerFor(neutral), 0.01, owner);
+  ROBOT_REQUIRE(result.valid);
+  ROBOT_REQUIRE(result.state == robot::CommissioningDriveState::Coasting);
+  const auto* stopped =
+      std::get_if<robot::BrakePayload>(&result.request.payload);
   ROBOT_REQUIRE(stopped != nullptr);
-  ROBOT_REQUIRE_NEAR(stopped->left_V, 0.0, 1e-12);
-  ROBOT_REQUIRE_NEAR(stopped->right_V, 0.0, 1e-12);
+  ROBOT_REQUIRE(stopped->mode == robot::StopMode::Coast);
 }
 
 ROBOT_TEST("commissioning cycle drives through Test safety gate at twelve volts") {
@@ -78,26 +76,8 @@ ROBOT_TEST("commissioning cycle drives through Test safety gate at twelve volts"
 
   const robot::FrameHeader start{10000, 1, 7};
   auto frame = cycle.update(start, mode, raw,
-                            controllerFor(start, config.arm_chord),
+                            controllerFor(start, 0, 1.0, 0.0),
                             timingFor(start));
-  ROBOT_REQUIRE_NEAR(frame.left_V, 0.0, 1e-12);
-  ROBOT_REQUIRE_NEAR(frame.right_V, 0.0, 1e-12);
-
-  const robot::FrameHeader held{1010000, 2, 7};
-  frame = cycle.update(held, mode, raw,
-                       controllerFor(held, config.arm_chord),
-                       timingFor(held));
-  ROBOT_REQUIRE_NEAR(frame.left_V, 0.0, 1e-12);
-
-  const robot::FrameHeader released{1020000, 3, 7};
-  frame = cycle.update(released, mode, raw, controllerFor(released),
-                       timingFor(released));
-  ROBOT_REQUIRE_NEAR(frame.left_V, 0.0, 1e-12);
-
-  const robot::FrameHeader drive{1030000, 4, 7};
-  frame = cycle.update(drive, mode, raw,
-                       controllerFor(drive, 0, 1.0, 0.0),
-                       timingFor(drive));
   ROBOT_REQUIRE(frame.owner == robot::RequestSource::Test);
   ROBOT_REQUIRE(frame.left_V > 0.0);
   ROBOT_REQUIRE(frame.right_V > 0.0);
@@ -105,7 +85,7 @@ ROBOT_TEST("commissioning cycle drives through Test safety gate at twelve volts"
   ROBOT_REQUIRE(std::abs(frame.right_V) <= 12.0);
 
   for (std::uint32_t i = 0; i < 40; ++i) {
-    const robot::FrameHeader full{1040000 + i * 10000, 5 + i, 7};
+    const robot::FrameHeader full{20000 + i * 10000, 2 + i, 7};
     frame = cycle.update(full, mode, raw,
                          controllerFor(full, 0, 1.0, 0.0),
                          timingFor(full));
@@ -114,37 +94,83 @@ ROBOT_TEST("commissioning cycle drives through Test safety gate at twelve volts"
   ROBOT_REQUIRE_NEAR(frame.right_V, 12.0, 1e-9);
 }
 
-ROBOT_TEST("B and field connection lock commissioning output") {
+ROBOT_TEST("B and every commissioning stop path use nonlatched Coast") {
   const auto config = robot::make1690XCommissioningArcadeConfig();
   robot::CommissioningControlCycle cycle(config);
   robot::RawDriveInputs raw{};
   const auto mode = testMode();
 
-  const robot::FrameHeader start{10000, 1, 7};
-  cycle.update(start, mode, raw, controllerFor(start, config.arm_chord),
-               timingFor(start));
-  const robot::FrameHeader held{1010000, 2, 7};
-  cycle.update(held, mode, raw, controllerFor(held, config.arm_chord),
-               timingFor(held));
-  const robot::FrameHeader released{1020000, 3, 7};
-  cycle.update(released, mode, raw, controllerFor(released),
-               timingFor(released));
+  const robot::FrameHeader drive{10000, 1, 7};
+  auto frame = cycle.update(drive, mode, raw,
+                            controllerFor(drive, 0, 1.0, 0.0),
+                            timingFor(drive));
+  ROBOT_REQUIRE(frame.left_V > 0.0);
+  ROBOT_REQUIRE(frame.right_V > 0.0);
 
-  const robot::FrameHeader emergency{1030000, 4, 7};
-  auto frame = cycle.update(
-      emergency, mode, raw,
-      controllerFor(emergency, config.emergency_stop_button, 1.0, 0.0),
-      timingFor(emergency));
+  const robot::FrameHeader coast{20000, 2, 7};
+  frame = cycle.update(coast, mode, raw,
+                       controllerFor(coast, config.coast_button, 1.0, 0.0),
+                       timingFor(coast));
   ROBOT_REQUIRE_NEAR(frame.left_V, 0.0, 1e-12);
   ROBOT_REQUIRE_NEAR(frame.right_V, 0.0, 1e-12);
-  ROBOT_REQUIRE(cycle.state() ==
-                robot::CommissioningDriveState::LatchedStop);
+  ROBOT_REQUIRE(frame.zero_behavior == robot::StopMode::Coast);
+  ROBOT_REQUIRE(cycle.state() == robot::CommissioningDriveState::Coasting);
+
+  const robot::FrameHeader resumed{30000, 3, 7};
+  frame = cycle.update(resumed, mode, raw,
+                       controllerFor(resumed, 0, 1.0, 0.0),
+                       timingFor(resumed));
+  ROBOT_REQUIRE(frame.left_V > 0.0);
+  ROBOT_REQUIRE(frame.right_V > 0.0);
+  ROBOT_REQUIRE(cycle.state() == robot::CommissioningDriveState::Driving);
+
+  const robot::FrameHeader neutral{40000, 4, 7};
+  frame = cycle.update(neutral, mode, raw, controllerFor(neutral),
+                       timingFor(neutral));
+  ROBOT_REQUIRE_NEAR(frame.left_V, 0.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(frame.right_V, 0.0, 1e-12);
+  ROBOT_REQUIRE(frame.zero_behavior == robot::StopMode::Coast);
 
   auto field_mode = mode;
   field_mode.field_connected = true;
-  const robot::FrameHeader field{1040000, 5, 7};
+  const robot::FrameHeader field{50000, 5, 7};
   frame = cycle.update(field, field_mode, raw,
                        controllerFor(field, 0, 1.0, 0.0), timingFor(field));
   ROBOT_REQUIRE_NEAR(frame.left_V, 0.0, 1e-12);
   ROBOT_REQUIRE_NEAR(frame.right_V, 0.0, 1e-12);
+  ROBOT_REQUIRE(frame.zero_behavior == robot::StopMode::Coast);
+
+  const robot::FrameHeader disconnected{60000, 6, 7};
+  auto disconnected_controller = controllerFor(disconnected, 0, 1.0, 0.0);
+  disconnected_controller.connected = false;
+  frame = cycle.update(disconnected, mode, raw, disconnected_controller,
+                       timingFor(disconnected));
+  ROBOT_REQUIRE_NEAR(frame.left_V, 0.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(frame.right_V, 0.0, 1e-12);
+  ROBOT_REQUIRE(frame.zero_behavior == robot::StopMode::Coast);
+
+  auto disabled_mode = mode;
+  disabled_mode.enabled = false;
+  const robot::FrameHeader disabled{70000, 7, 7};
+  frame = cycle.update(disabled, disabled_mode, raw,
+                       controllerFor(disabled, 0, 1.0, 0.0),
+                       timingFor(disabled));
+  ROBOT_REQUIRE_NEAR(frame.left_V, 0.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(frame.right_V, 0.0, 1e-12);
+  ROBOT_REQUIRE(frame.zero_behavior == robot::StopMode::Coast);
+}
+
+ROBOT_TEST("commissioning output watchdog uses Coast for stale frames") {
+  const auto robot_config = robot::make1690XCommissioningConfig();
+  robot::FakeDriveIO io(robot_config.hardware, {1.0, 12.0});
+  ROBOT_REQUIRE(io.initialize());
+  robot::OutputService output(
+      io, {robot_config.runtime.output_ttl_us,
+           robot_config.electrical.max_command_voltage_V, 1e-9,
+           robot::kCommissioningStopMode});
+  const auto mode = testMode();
+  const auto result = output.tick(mode, nullptr, 10000);
+  ROBOT_REQUIRE(result.action == robot::OutputAction::Stopped);
+  ROBOT_REQUIRE((result.reject_bits & robot::kOutputNoFrame) != 0);
+  ROBOT_REQUIRE(io.lastStopMode() == robot::StopMode::Coast);
 }

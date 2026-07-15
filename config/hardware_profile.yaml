@@ -87,5 +87,6 @@ commissioning_test:
   enabled_in_non_field_opcontrol: true
   maximum_voltage_V: 12.0
   controller_mapping: "Left Y throttle; Left X turn; single-stick Arcade"
-  arm: "hold L1+L2+R1+R2 for 1 s at neutral, then release"
-  emergency_stop: "B; latched until mode epoch changes"
+  arming: "none; drive is active immediately in non-field opcontrol"
+  coast_button: "B; hold for immediate Coast, release to resume stick control"
+  zero_behavior: "Coast for neutral, B, disabled, disconnect, request stale, and output stale"

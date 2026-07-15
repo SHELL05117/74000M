@@ -40,7 +40,7 @@ class RobotRuntime {
                       actuator_store_, timing_, cycle_, {10, true}),
         output_(drive_, {config_.runtime.output_ttl_us,
                          config_.electrical.max_command_voltage_V, 1e-9,
-                         robot::StopMode::Brake}),
+                         robot::kCommissioningStopMode}),
         output_task_(clock_, mode_store_, actuator_store_, output_, 5) {}
 
   bool initializeHardware() {
@@ -106,15 +106,15 @@ extern "C" void initialize() {
     pros::lcd::set_text(3, "OUTPUT TASK ERROR");
     return;
   }
-  pros::lcd::set_text(3, "READY: L1 L2 R1 R2");
-  pros::lcd::set_text(4, "HOLD 1S, RELEASE");
+  pros::lcd::set_text(3, "READY: DIRECT DRIVE");
+  pros::lcd::set_text(4, "ALL STOPS = COAST");
   pros::lcd::set_text(5, "LEFT Y/X ARCADE");
-  pros::lcd::set_text(6, "B = LATCHED STOP");
+  pros::lcd::set_text(6, "B = HOLD TO COAST");
 }
 
 extern "C" void disabled() {
   if (runtime != nullptr) runtime->forceDisabled();
-  pros::lcd::set_text(7, "DISABLED / BRAKE");
+  pros::lcd::set_text(7, "DISABLED / COAST");
 }
 
 extern "C" void competition_initialize() {
@@ -131,6 +131,6 @@ extern "C" void opcontrol() {
     pros::lcd::set_text(7, "DRIVE: LOCKED");
     return;
   }
-  pros::lcd::set_text(7, "TEST: ARM BEFORE DRIVE");
+  pros::lcd::set_text(7, "TEST: DIRECT / B COAST");
   runtime->runControl();
 }

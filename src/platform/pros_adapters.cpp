@@ -136,6 +136,10 @@ bool ProsDriveIO::initialize() {
     success = configureMotor(motor) && success;
   for (const auto& motor : hardware_.right)
     success = configureMotor(motor) && success;
+  // The 1690X commissioning policy keeps all six drivetrain brake modes in
+  // Coast. Nonzero voltage commands still drive normally; the mode controls
+  // only the behavior after an explicit brake/zero command.
+  success = stop(StopMode::Coast) && success;
   return success;
 }
 

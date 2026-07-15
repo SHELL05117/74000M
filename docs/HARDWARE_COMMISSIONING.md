@@ -92,7 +92,7 @@ hardware_output = true  // 仍只允许受限 Test 请求
 
 - Driver → Disabled → Driver，旧 epoch 满幅帧不能复活；
 - 请求停止更新后，请求 TTL 触发停止；
-- ControlLoop 停止发布后，输出 TTL 触发 `brake()` 停车；
+- ControlLoop 停止发布后，输出 TTL 触发配置的 `stop()`/`brake()` 路径；当前 1690X 样机使用 `Coast`；
 - 未来时间戳、乱序、NaN/Inf、错误 owner lease 均不能输出；
 - Controller 断联后取消驾驶请求、清有记忆状态且不转给自动；
 - UI、SD 和日志任务卡住时控制输出和周期预算不变。
@@ -148,7 +148,7 @@ pose_good = true
 - throttle/turn 上升、下降和换向 Slew；
 - 曲率增益、Quick Turn 阈值和限制；
 - 输出 Slew 与输入 Slew 的分工；
-- 零请求的 Coast/Brake 策略；
+- 零请求的 Coast/Brake 策略；当前 1690X 手动样机统一为 `Coast`，仍需实测自由滑行距离；
 - 航向辅助进入/退出速度、杆中立门、`kP/kD` 和最大修正；
 - 驾驶档位、最大输出和低电/降额下手感。
 

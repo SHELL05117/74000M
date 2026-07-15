@@ -128,7 +128,7 @@ class SafetyGate {
     frame.h = input.output_header;
     frame.left_V = std::clamp(slewed.left_V, -allowed_V, allowed_V);
     frame.right_V = std::clamp(slewed.right_V, -allowed_V, allowed_V);
-    frame.zero_behavior = StopMode::Brake;
+    frame.zero_behavior = config_.no_request_stop_mode;
     frame.owner = request->source;
     frame.owner_id = request->owner.command_id;
     frame.owner_lease = request->owner.lease_generation;
