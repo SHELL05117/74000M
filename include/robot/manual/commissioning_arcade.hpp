@@ -45,13 +45,14 @@ inline CommissioningArcadeConfig make1690XCommissioningArcadeConfig() {
   config.turn_rise_per_s = 4.0;
   config.turn_fall_per_s = 8.0;
   config.max_dt_s = 0.05;
-  config.max_voltage_V = 4.0;
+  config.max_voltage_V = 12.0;
   config.request_ttl_us = 30000;
   config.arm_hold_us = 1000000;
   config.arm_neutral_threshold = 0.05;
   config.arm_chord = kButtonL1 | kButtonL2 | kButtonR1 | kButtonR2;
   config.emergency_stop_button = kButtonB;
-  config.output_slew = {16.0, 32.0, 0.05};
+  // Matches the 3/s throttle rise and 6/s fall at the 12 V ceiling.
+  config.output_slew = {36.0, 72.0, 0.05};
   return config;
 }
 
@@ -69,7 +70,7 @@ inline bool validCommissioningArcadeConfig(
          config.turn_fall_per_s > 0.0 &&
          std::isfinite(config.max_dt_s) && config.max_dt_s > 0.0 &&
          std::isfinite(config.max_voltage_V) &&
-         config.max_voltage_V > 0.0 && config.max_voltage_V <= 4.0 &&
+         config.max_voltage_V > 0.0 && config.max_voltage_V <= 12.0 &&
          config.request_ttl_us > 0 && config.arm_hold_us > 0 &&
          std::isfinite(config.arm_neutral_threshold) &&
          config.arm_neutral_threshold >= 0.0 &&

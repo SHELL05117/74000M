@@ -23,14 +23,24 @@ struct MotorPortConfig {
   double motor_rev_per_wheel_rev{1.0};
 };
 
-// The supplied wiring notation uses true=forward. The HAL stores whether the
-// motor is reversed, so the two flags intentionally have opposite polarity.
+// Converts a physical "positive voltage moves this wheel forward" flag into
+// the HAL's reversed flag. Kept for callers whose source data uses that
+// polarity rather than the VEX/PROS motor-constructor polarity.
 constexpr MotorPortConfig motorFromForwardFlag(
     std::int8_t smart_port, std::uint16_t cartridge_rpm,
     bool forward_positive,
     double motor_rev_per_wheel_rev = 1.0) noexcept {
   return {smart_port, !forward_positive, cartridge_rpm,
           motor_rev_per_wheel_rev};
+}
+
+// Stores a VEX/PROS motor-constructor reversal flag without changing its
+// polarity. The 1690X values were supplied in this form and HIL observation
+// showed that inverting them made the complete chassis drive backward.
+constexpr MotorPortConfig motorFromReversedFlag(
+    std::int8_t smart_port, std::uint16_t cartridge_rpm, bool reversed,
+    double motor_rev_per_wheel_rev = 1.0) noexcept {
+  return {smart_port, reversed, cartridge_rpm, motor_rev_per_wheel_rev};
 }
 
 struct ImuConfig {
@@ -258,27 +268,28 @@ inline RobotConfig make1690XCommissioningConfig() {
   config.identity = {"1690X", "1690X", "1690X SAMPLE", "commission", 0,
                      2, 0};
   config.hardware.left = {{
-      motorFromForwardFlag(11, 600, false,
-                           kRatio6MotorRevPerWheelRev),
-      motorFromForwardFlag(12, 200, true,
-                           kRatio18MotorRevPerWheelRev),
-      motorFromForwardFlag(13, 600, true,
-                           kRatio6MotorRevPerWheelRev),
+      motorFromReversedFlag(11, 600, false,
+                            kRatio6MotorRevPerWheelRev),
+      motorFromReversedFlag(12, 200, true,
+                            kRatio18MotorRevPerWheelRev),
+      motorFromReversedFlag(13, 600, true,
+                            kRatio6MotorRevPerWheelRev),
   }};
   config.hardware.right = {{
-      motorFromForwardFlag(1, 600, true,
-                           kRatio6MotorRevPerWheelRev),
-      motorFromForwardFlag(2, 200, false,
-                           kRatio18MotorRevPerWheelRev),
-      motorFromForwardFlag(3, 600, false,
-                           kRatio6MotorRevPerWheelRev),
+      motorFromReversedFlag(1, 600, true,
+                            kRatio6MotorRevPerWheelRev),
+      motorFromReversedFlag(2, 200, false,
+                            kRatio18MotorRevPerWheelRev),
+      motorFromReversedFlag(3, 600, false,
+                            kRatio6MotorRevPerWheelRev),
   }};
   config.hardware.imu = {false, 0};
   config.geometry = {0.06985, 0.1524};
   // CAD/nominal values are not promoted to fitted odometry calibration.
   config.calibration = {};
-  // Initial commissioning build is physically capped at 4 V.
-  config.electrical.max_command_voltage_V = 4.0;
+  // Operator-authorized full-voltage commissioning ceiling. This is the V5
+  // command limit; input/output slew and all commissioning safety gates remain.
+  config.electrical.max_command_voltage_V = 12.0;
   config.hardware_verification = VerificationLevel::Implemented;
   config.selected_route = RouteIds::kDoNothing;
   return config;

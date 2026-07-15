@@ -88,7 +88,7 @@ void outputTaskEntry(void* parameter) {
 extern "C" void initialize() {
   pros::lcd::initialize();
   pros::lcd::set_text(0, "1690X 6-MOTOR SAMPLE");
-  pros::lcd::set_text(1, "COMMISSIONING: 4V MAX");
+  pros::lcd::set_text(1, "COMMISSIONING: 12V MAX");
   pros::lcd::set_text(2, "NO IMU / AUTO LOCKED");
 
   runtime = new RobotRuntime();
