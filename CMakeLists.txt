@@ -36,6 +36,7 @@ if(BUILD_TESTING)
         tests/test_scheduler.cpp
         tests/test_health.cpp
         tests/test_calibration.cpp
+        tests/test_hmi.cpp
     )
     target_link_libraries(robot_tests PRIVATE robot_core)
     target_include_directories(robot_tests PRIVATE tests)
