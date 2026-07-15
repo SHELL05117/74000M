@@ -16,6 +16,13 @@ enum class Fault : FaultBits {
   ControllerDisconnected = FaultBits{1} << 5,
   ThermalDerate = FaultBits{1} << 6,
   Stall = FaultBits{1} << 7,
+  MotorOverCurrent = FaultBits{1} << 8,
+  MotorFaultReported = FaultBits{1} << 9,
+  LowBattery = FaultBits{1} << 10,
+  OutputWriteFailure = FaultBits{1} << 11,
+  ImuCalibrationTimeout = FaultBits{1} << 12,
+  SensorFrozen = FaultBits{1} << 13,
+  SlipConfirmed = FaultBits{1} << 14,
 };
 
 constexpr FaultBits faultBit(Fault fault) noexcept {

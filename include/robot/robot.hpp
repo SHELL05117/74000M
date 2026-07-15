@@ -17,6 +17,8 @@
 #include "robot/drive/output_service.hpp"
 #include "robot/drive/safety_gate.hpp"
 #include "robot/drive/voltage_allocation.hpp"
+#include "robot/health/fault_manager.hpp"
+#include "robot/health/motor_protection.hpp"
 #include "robot/manual/heading_assist.hpp"
 #include "robot/manual/input_shaping.hpp"
 #include "robot/manual/manual_drive.hpp"
