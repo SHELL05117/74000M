@@ -14,6 +14,7 @@
 #include "robot/drive/output_service.hpp"
 #include "robot/drive/safety_gate.hpp"
 #include "robot/drive/voltage_allocation.hpp"
+#include "robot/odometry/odometry.hpp"
 #include "robot/platform/hardware_self_test.hpp"
 #include "robot/platform/fake_io.hpp"
 #include "robot/platform/io.hpp"

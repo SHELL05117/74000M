@@ -7,6 +7,7 @@
 #include "robot/core/fault.hpp"
 #include "robot/core/frame.hpp"
 #include "robot/core/quality.hpp"
+#include "robot/state/raw_inputs.hpp"
 
 namespace robot {
 
@@ -64,7 +65,7 @@ struct ValidatedInputs {
   TimeUs acquisition_end_us{};
   std::array<ValidatedMotor, kMotorsPerSide> left{};
   std::array<ValidatedMotor, kMotorsPerSide> right{};
-  std::array<ValidatedTrackingWheel, 2> tracking{};
+  std::array<ValidatedTrackingWheel, kMaxTrackingWheels> tracking{};
   ValidatedImu imu{};
   CheckedScalar battery_V{};
   FaultBits fault_bits{};

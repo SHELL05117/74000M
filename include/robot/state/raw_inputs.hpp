@@ -9,6 +9,8 @@
 
 namespace robot {
 
+constexpr std::size_t kMaxTrackingWheels = 3;
+
 struct ScalarSample {
   double value{};
   TimeUs sample_time_us{};
@@ -50,7 +52,7 @@ struct RawDriveInputs {
   TimeUs acquisition_end_us{};
   MotorSideRaw<kMotorsPerSide> left;
   MotorSideRaw<kMotorsPerSide> right;
-  std::array<TrackingWheelRaw, 2> tracking{};
+  std::array<TrackingWheelRaw, kMaxTrackingWheels> tracking{};
   ImuRaw imu;
   ScalarSample battery_V;
 };

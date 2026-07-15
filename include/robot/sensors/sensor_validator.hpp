@@ -354,7 +354,7 @@ class SensorValidator {
   SensorValidatorConfig config_{};
   std::array<MotorBank, kMotorsPerSide> left_{};
   std::array<MotorBank, kMotorsPerSide> right_{};
-  std::array<TrackingBank, 2> tracking_{};
+  std::array<TrackingBank, kMaxTrackingWheels> tracking_{};
   ScalarValidator imu_rotation_{};
   ScalarValidator imu_rate_{};
   ScalarValidator battery_{};
