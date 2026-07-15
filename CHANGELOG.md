@@ -4,6 +4,7 @@ This file records implementation commits in simple English. Dedicated `chore(log
 
 ## 2026-07-15
 
+- 4cea04d385c16639334823e223b1b89fd7c25851 — Added the mandatory project guide, enforced it in the default agent rules, and created the English change log.
 - 6b19422fdea9ceec24405c5b051b6e4a15704c5c — Added the startup self-check, three-pulse Controller warning, and pose-only Controller display.
 - 0ee2cf998312a4ec0c788f700c897eca0fc88978 — Increased the commissioning throttle and output rise rates for faster acceleration.
 - 8b76c4a70934022b1fadf619a41d815b0101208d — Removed drive arming and made commissioning stops use Coast.
