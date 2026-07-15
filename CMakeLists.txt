@@ -42,6 +42,7 @@ if(BUILD_TESTING)
         tests/test_chassis_velocity_controller.cpp
         tests/test_motion_commands.cpp
         tests/test_trajectory.cpp
+        tests/test_trajectory_tracker.cpp
     )
     target_link_libraries(robot_tests PRIVATE robot_core)
     target_include_directories(robot_tests PRIVATE tests)
