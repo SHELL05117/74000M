@@ -35,6 +35,19 @@ pros::motor_brake_mode_e_t toProsBrake(StopMode mode) {
   return pros::E_MOTOR_BRAKE_BRAKE;
 }
 
+pros::motor_gearset_e_t toProsGearset(std::uint16_t cartridge_rpm) {
+  switch (cartridge_rpm) {
+    case 100:
+      return pros::E_MOTOR_GEARSET_36;
+    case 200:
+      return pros::E_MOTOR_GEARSET_18;
+    case 600:
+      return pros::E_MOTOR_GEARSET_06;
+    default:
+      return pros::E_MOTOR_GEARSET_INVALID;
+  }
+}
+
 }  // namespace
 
 TimeUs ProsClock::nowUs() const { return pros::c::micros(); }
@@ -106,8 +119,14 @@ ProsDriveIO::ProsDriveIO(const RobotConfig& config,
 }
 
 bool ProsDriveIO::configureMotor(const MotorPortConfig& motor) {
-  return pros::c::motor_set_encoder_units(
-             motor.smart_port, pros::E_MOTOR_ENCODER_DEGREES) != PROS_ERR;
+  const auto gearset = toProsGearset(motor.cartridge_rpm);
+  if (gearset == pros::E_MOTOR_GEARSET_INVALID) return false;
+  const bool gearing_ok =
+      pros::c::motor_set_gearing(motor.smart_port, gearset) != PROS_ERR;
+  const bool units_ok =
+      pros::c::motor_set_encoder_units(
+          motor.smart_port, pros::E_MOTOR_ENCODER_DEGREES) != PROS_ERR;
+  return gearing_ok && units_ok;
 }
 
 bool ProsDriveIO::initialize() {

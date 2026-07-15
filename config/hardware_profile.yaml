@@ -1,9 +1,11 @@
 # Offline hardware manifest for 74000M.
 #
-# This file deliberately contains no guessed final hardware values. Replace each
-# null only from the wiring table, CAD, physical inspection, or a calibration
-# record. Runtime code must keep every capability locked while
-# verification.hardware is not HILValidated or better.
+# Only the six drivetrain motor facts below have been supplied. Every remaining
+# null must still come from the wiring table, CAD, physical inspection, or a
+# calibration record. The supplied direction flag means true=forward, while the
+# runtime field is reversed, so reversed = !supplied_forward. Runtime code must
+# keep every capability locked while verification.hardware is not HILValidated
+# or better.
 
 identity:
   schema_version: 1
@@ -29,13 +31,13 @@ coordinate_contract:
 
 hardware:
   left_drive:
-    - { smart_port: null, reversed: null, cartridge_rpm: null }
-    - { smart_port: null, reversed: null, cartridge_rpm: null }
-    - { smart_port: null, reversed: null, cartridge_rpm: null }
+    - { smart_port: 11, reversed: true,  cartridge_rpm: 600 } # Motor_DT_LA; supplied_forward=false; ratio6_1
+    - { smart_port: 12, reversed: false, cartridge_rpm: 200 } # Motor_DT_LM; supplied_forward=true;  ratio18_1
+    - { smart_port: 13, reversed: false, cartridge_rpm: 600 } # Motor_DT_LB; supplied_forward=true;  ratio6_1
   right_drive:
-    - { smart_port: null, reversed: null, cartridge_rpm: null }
-    - { smart_port: null, reversed: null, cartridge_rpm: null }
-    - { smart_port: null, reversed: null, cartridge_rpm: null }
+    - { smart_port: 1, reversed: false, cartridge_rpm: 600 } # Motor_DT_RA; supplied_forward=true;  ratio6_1
+    - { smart_port: 2, reversed: true,  cartridge_rpm: 200 } # Motor_DT_RM; supplied_forward=false; ratio18_1
+    - { smart_port: 3, reversed: true,  cartridge_rpm: 600 } # Motor_DT_RB; supplied_forward=false; ratio6_1
   imu:
     smart_port: null
     mounting: null

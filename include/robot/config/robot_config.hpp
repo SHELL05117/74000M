@@ -19,6 +19,14 @@ struct MotorPortConfig {
   std::uint16_t cartridge_rpm{};
 };
 
+// The supplied wiring notation uses true=forward. The HAL stores whether the
+// motor is reversed, so the two flags intentionally have opposite polarity.
+constexpr MotorPortConfig motorFromForwardFlag(
+    std::int8_t smart_port, std::uint16_t cartridge_rpm,
+    bool forward_positive) noexcept {
+  return {smart_port, !forward_positive, cartridge_rpm};
+}
+
 struct RotationSensorConfig {
   bool installed{};
   std::uint8_t smart_port{};
@@ -216,6 +224,16 @@ inline ConfigCheck validateConfig(const RobotConfig& config,
 inline RobotConfig makeOfflineRobotConfig() {
   RobotConfig config{};
   config.identity = {"74000", "UNVERIFIED", "74000M", "offline", 0, 1, 0};
+  config.hardware.left = {{
+      motorFromForwardFlag(11, 600, false),
+      motorFromForwardFlag(12, 200, true),
+      motorFromForwardFlag(13, 600, true),
+  }};
+  config.hardware.right = {{
+      motorFromForwardFlag(1, 600, true),
+      motorFromForwardFlag(2, 200, false),
+      motorFromForwardFlag(3, 600, false),
+  }};
   config.hardware_verification = VerificationLevel::Implemented;
   config.selected_route = RouteIds::kDoNothing;
   return config;
