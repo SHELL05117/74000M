@@ -45,6 +45,7 @@ if(BUILD_TESTING)
         tests/test_trajectory_tracker.cpp
         tests/test_command_groups_routes.cpp
         tests/test_autonomy_safety.cpp
+        tests/test_offline_closed_loop.cpp
     )
     target_link_libraries(robot_tests PRIVATE robot_core)
     target_include_directories(robot_tests PRIVATE tests)
