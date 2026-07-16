@@ -28,10 +28,10 @@ struct CommissioningCurvatureConfig {
   double max_dt_s{};
   double curvature_gain{};
   double quick_turn_gain{};
-  double quick_turn_max_throttle{};
+  double quick_turn_enter_throttle{};
+  double quick_turn_exit_throttle{};
   double max_voltage_V{};
   TimeUs request_ttl_us{};
-  std::uint32_t quick_turn_button{};
   std::uint32_t coast_button{};
   OutputSlewConfig output_slew{};
 };
@@ -42,20 +42,20 @@ make1690XCommissioningCurvatureConfig() {
   config.throttle_shape = {0.0, 0.06, 0.15};
   config.turn_shape = {0.0, 0.06, 0.15};
   config.throttle_rise_per_s = 20.0;
-  config.throttle_fall_per_s = 6.0;
-  config.turn_rise_per_s = 4.0;
-  config.turn_fall_per_s = 8.0;
+  config.throttle_fall_per_s = 20.0;
+  config.turn_rise_per_s = 20.0;
+  config.turn_fall_per_s = 20.0;
   config.max_dt_s = 0.05;
   config.curvature_gain = 1.0;
   config.quick_turn_gain = 1.0;
-  config.quick_turn_max_throttle = 0.2;
+  config.quick_turn_enter_throttle = 0.15;
+  config.quick_turn_exit_throttle = 0.25;
   config.max_voltage_V = 12.0;
   config.request_ttl_us = 30000;
-  config.quick_turn_button = kButtonR1;
   config.coast_button = kButtonB;
-  // Fast HIL candidate: full forward reaches the legal 12 V command ceiling
-  // in about 50 ms. Falling/reversal behavior stays conservative.
-  config.output_slew = {240.0, 72.0, 0.05};
+  // Aggressive HIL candidate: throttle, turn, and final voltage can reach the
+  // legal full-scale command in about 50 ms while retaining bounded Slew.
+  config.output_slew = {240.0, 240.0, 0.05};
   return config;
 }
 
@@ -76,14 +76,15 @@ inline bool validCommissioningCurvatureConfig(
          config.curvature_gain > 0.0 && config.curvature_gain <= 1.0 &&
          std::isfinite(config.quick_turn_gain) &&
          config.quick_turn_gain > 0.0 && config.quick_turn_gain <= 1.0 &&
-         std::isfinite(config.quick_turn_max_throttle) &&
-         config.quick_turn_max_throttle >= 0.0 &&
-         config.quick_turn_max_throttle <= 1.0 &&
+         std::isfinite(config.quick_turn_enter_throttle) &&
+         config.quick_turn_enter_throttle >= 0.0 &&
+         std::isfinite(config.quick_turn_exit_throttle) &&
+         config.quick_turn_exit_throttle >
+             config.quick_turn_enter_throttle &&
+         config.quick_turn_exit_throttle <= 1.0 &&
          std::isfinite(config.max_voltage_V) &&
          config.max_voltage_V > 0.0 && config.max_voltage_V <= 12.0 &&
-         config.request_ttl_us > 0 && config.quick_turn_button != 0 &&
-         config.coast_button != 0 &&
-         config.quick_turn_button != config.coast_button &&
+         config.request_ttl_us > 0 && config.coast_button != 0 &&
          AsymmetricVoltageSlew(config.output_slew).valid();
 }
 
@@ -92,7 +93,6 @@ struct CommissioningCurvatureResult {
   CommissioningDriveState state{CommissioningDriveState::Coasting};
   double shaped_throttle{};
   double shaped_turn{};
-  bool quick_turn_requested{};
   bool quick_turn_active{};
   bool valid{};
 };
@@ -136,7 +136,7 @@ class CommissioningCurvatureMapper {
     }
 
     if ((controller.buttons & config_.coast_button) != 0) {
-      resetSlew();
+      resetControlState();
       state_ = CommissioningDriveState::Coasting;
       result.request = makeCoastRequest(header, owner);
       result.valid = true;
@@ -153,7 +153,7 @@ class CommissioningCurvatureMapper {
     const double turn_target =
         shapeCenteredAxis(centered_turn, config_.turn_shape);
     if (throttle_target == 0.0 && turn_target == 0.0) {
-      resetSlew();
+      resetControlState();
       state_ = CommissioningDriveState::Coasting;
       result.request = makeCoastRequest(header, owner);
       result.valid = true;
@@ -169,15 +169,21 @@ class CommissioningCurvatureMapper {
       return result;
     }
 
-    result.quick_turn_requested =
-        (controller.buttons & config_.quick_turn_button) != 0;
-    result.quick_turn_active =
-        result.quick_turn_requested &&
-        std::abs(throttle_target) <= config_.quick_turn_max_throttle;
+    const double throttle_magnitude = std::abs(throttle_target);
+    if (turn_target == 0.0) {
+      quick_turn_active_ = false;
+    } else if (quick_turn_active_) {
+      if (throttle_magnitude >= config_.quick_turn_exit_throttle)
+        quick_turn_active_ = false;
+    } else if (throttle_magnitude <=
+               config_.quick_turn_enter_throttle) {
+      quick_turn_active_ = true;
+    }
+    result.quick_turn_active = quick_turn_active_;
 
     // Single-left-stick Curvature: normal steering scales with |throttle|.
-    // Positive Left X requests a right turn. R1 explicitly enables low-speed
-    // Quick Turn without changing the downstream Test/safety/output chain.
+    // Positive Left X requests a right turn. Low commanded throttle and a
+    // nonzero turn command automatically select full-gain Quick Turn.
     const double differential_turn = std::clamp(
         result.shaped_turn *
             (result.quick_turn_active
@@ -191,7 +197,7 @@ class CommissioningCurvatureMapper {
     const VoltageAllocation allocation =
         desaturateProportional(normalized, 1.0);
     if (!allocation.valid) {
-      resetSlew();
+      resetControlState();
       state_ = CommissioningDriveState::Coasting;
       result.state = state_;
       return result;
@@ -224,7 +230,7 @@ class CommissioningCurvatureMapper {
   void reset(std::uint32_t epoch = 0) noexcept {
     epoch_ = epoch;
     state_ = CommissioningDriveState::Coasting;
-    resetSlew();
+    resetControlState();
   }
 
   CommissioningDriveState state() const noexcept { return state_; }
@@ -246,11 +252,17 @@ class CommissioningCurvatureMapper {
     turn_slew_.reset();
   }
 
+  void resetControlState() noexcept {
+    resetSlew();
+    quick_turn_active_ = false;
+  }
+
   CommissioningCurvatureConfig config_{};
   AsymmetricAxisSlew throttle_slew_;
   AsymmetricAxisSlew turn_slew_;
   std::uint32_t epoch_{};
   CommissioningDriveState state_{CommissioningDriveState::Coasting};
+  bool quick_turn_active_{};
 };
 
 class CommissioningDriveLeaseCommand final : public Command {

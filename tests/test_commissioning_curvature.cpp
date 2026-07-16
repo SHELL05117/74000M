@@ -48,6 +48,13 @@ robot::CommissioningCurvatureConfig directMappingConfig() {
 
 }  // namespace
 
+ROBOT_TEST("commissioning Curvature requires ordered automatic turn gates") {
+  auto config = robot::make1690XCommissioningCurvatureConfig();
+  ROBOT_REQUIRE(robot::validCommissioningCurvatureConfig(config));
+  config.quick_turn_exit_throttle = config.quick_turn_enter_throttle;
+  ROBOT_REQUIRE(!robot::validCommissioningCurvatureConfig(config));
+}
+
 ROBOT_TEST("commissioning Curvature drives immediately and neutral coasts") {
   const auto config = robot::make1690XCommissioningCurvatureConfig();
   robot::CommissioningCurvatureMapper mapper(config);
@@ -104,28 +111,16 @@ ROBOT_TEST("commissioning Curvature scales steering with throttle") {
   ROBOT_REQUIRE_NEAR(payload->right_V, -9.0, 1e-12);
 }
 
-ROBOT_TEST("R1 enables Quick Turn only at low commanded throttle") {
+ROBOT_TEST("low commanded throttle automatically enables full Quick Turn") {
   const auto config = directMappingConfig();
   const robot::OwnerToken owner{42, robot::Requirement::kDrivetrain, 3, 7};
   const auto mode = testMode();
 
-  robot::CommissioningCurvatureMapper normal_mapper(config);
-  const robot::FrameHeader normal{10000, 1, 7};
-  auto result = normal_mapper.update(
-      normal, mode, controllerFor(normal, 0, 0.0, 1.0), 0.01, owner);
-  ROBOT_REQUIRE(result.valid);
-  ROBOT_REQUIRE(result.state == robot::CommissioningDriveState::Coasting);
-  ROBOT_REQUIRE(
-      std::get_if<robot::BrakePayload>(&result.request.payload) != nullptr);
-
   robot::CommissioningCurvatureMapper quick_mapper(config);
-  const robot::FrameHeader quick{20000, 2, 7};
-  result = quick_mapper.update(
-      quick, mode,
-      controllerFor(quick, config.quick_turn_button, 0.0, 1.0), 0.01,
-      owner);
+  const robot::FrameHeader quick{10000, 1, 7};
+  auto result = quick_mapper.update(
+      quick, mode, controllerFor(quick, 0, 0.0, 1.0), 0.01, owner);
   ROBOT_REQUIRE(result.valid);
-  ROBOT_REQUIRE(result.quick_turn_requested);
   ROBOT_REQUIRE(result.quick_turn_active);
   const auto* payload =
       std::get_if<robot::WheelVoltagePayload>(&result.request.payload);
@@ -134,18 +129,81 @@ ROBOT_TEST("R1 enables Quick Turn only at low commanded throttle") {
   ROBOT_REQUIRE_NEAR(payload->right_V, -12.0, 1e-12);
 
   robot::CommissioningCurvatureMapper high_throttle_mapper(config);
-  const robot::FrameHeader high{30000, 3, 7};
+  const robot::FrameHeader high{20000, 2, 7};
   result = high_throttle_mapper.update(
-      high, mode,
-      controllerFor(high, config.quick_turn_button, 0.5, 0.5), 0.01,
-      owner);
+      high, mode, controllerFor(high, 0, 0.5, 0.5), 0.01, owner);
   ROBOT_REQUIRE(result.valid);
-  ROBOT_REQUIRE(result.quick_turn_requested);
   ROBOT_REQUIRE(!result.quick_turn_active);
   payload = std::get_if<robot::WheelVoltagePayload>(&result.request.payload);
   ROBOT_REQUIRE(payload != nullptr);
   ROBOT_REQUIRE_NEAR(payload->left_V, 9.0, 1e-12);
   ROBOT_REQUIRE_NEAR(payload->right_V, 3.0, 1e-12);
+}
+
+ROBOT_TEST("automatic Quick Turn uses throttle hysteresis") {
+  const auto config = directMappingConfig();
+  robot::CommissioningCurvatureMapper mapper(config);
+  const robot::OwnerToken owner{42, robot::Requirement::kDrivetrain, 3, 7};
+  const auto mode = testMode();
+
+  const robot::FrameHeader enter{10000, 1, 7};
+  auto result = mapper.update(
+      enter, mode, controllerFor(enter, 0, 0.10, 0.5), 0.01, owner);
+  ROBOT_REQUIRE(result.valid);
+  ROBOT_REQUIRE(result.quick_turn_active);
+
+  const robot::FrameHeader hold{20000, 2, 7};
+  result = mapper.update(
+      hold, mode, controllerFor(hold, 0, 0.20, 0.5), 0.01, owner);
+  ROBOT_REQUIRE(result.valid);
+  ROBOT_REQUIRE(result.quick_turn_active);
+
+  const robot::FrameHeader exit{30000, 3, 7};
+  result = mapper.update(
+      exit, mode, controllerFor(exit, 0, 0.30, 0.5), 0.01, owner);
+  ROBOT_REQUIRE(result.valid);
+  ROBOT_REQUIRE(!result.quick_turn_active);
+
+  const robot::FrameHeader outside_enter{40000, 4, 7};
+  result = mapper.update(
+      outside_enter, mode,
+      controllerFor(outside_enter, 0, 0.20, 0.5), 0.01, owner);
+  ROBOT_REQUIRE(result.valid);
+  ROBOT_REQUIRE(!result.quick_turn_active);
+
+  const robot::FrameHeader reenter{50000, 5, 7};
+  result = mapper.update(
+      reenter, mode, controllerFor(reenter, 0, 0.10, 0.5), 0.01,
+      owner);
+  ROBOT_REQUIRE(result.valid);
+  ROBOT_REQUIRE(result.quick_turn_active);
+}
+
+ROBOT_TEST("Coast clears automatic Quick Turn hysteresis memory") {
+  const auto config = directMappingConfig();
+  robot::CommissioningCurvatureMapper mapper(config);
+  const robot::OwnerToken owner{42, robot::Requirement::kDrivetrain, 3, 7};
+  const auto mode = testMode();
+
+  const robot::FrameHeader enter{10000, 1, 7};
+  auto result = mapper.update(
+      enter, mode, controllerFor(enter, 0, 0.10, 0.5), 0.01, owner);
+  ROBOT_REQUIRE(result.valid);
+  ROBOT_REQUIRE(result.quick_turn_active);
+
+  const robot::FrameHeader coast{20000, 2, 7};
+  result = mapper.update(
+      coast, mode,
+      controllerFor(coast, config.coast_button, 0.10, 0.5), 0.01,
+      owner);
+  ROBOT_REQUIRE(result.valid);
+  ROBOT_REQUIRE(result.state == robot::CommissioningDriveState::Coasting);
+
+  const robot::FrameHeader resume{30000, 3, 7};
+  result = mapper.update(
+      resume, mode, controllerFor(resume, 0, 0.20, 0.5), 0.01, owner);
+  ROBOT_REQUIRE(result.valid);
+  ROBOT_REQUIRE(!result.quick_turn_active);
 }
 
 ROBOT_TEST("commissioning Curvature keeps wheel ratio when saturated") {
@@ -168,8 +226,11 @@ ROBOT_TEST("commissioning cycle drives through Test safety gate at twelve volts"
   const auto config = robot::make1690XCommissioningCurvatureConfig();
   ROBOT_REQUIRE_NEAR(config.max_voltage_V, 12.0, 1e-12);
   ROBOT_REQUIRE_NEAR(config.throttle_rise_per_s, 20.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(config.throttle_fall_per_s, 20.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(config.turn_rise_per_s, 20.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(config.turn_fall_per_s, 20.0, 1e-12);
   ROBOT_REQUIRE_NEAR(config.output_slew.rise_V_per_s, 240.0, 1e-12);
-  ROBOT_REQUIRE_NEAR(config.output_slew.fall_V_per_s, 72.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(config.output_slew.fall_V_per_s, 240.0, 1e-12);
   robot::CommissioningControlCycle cycle(config);
   const auto mode = testMode();
   robot::RawDriveInputs raw{};
@@ -199,6 +260,26 @@ ROBOT_TEST("commissioning cycle drives through Test safety gate at twelve volts"
                        timingFor(full));
   ROBOT_REQUIRE_NEAR(frame.left_V, 12.0, 1e-9);
   ROBOT_REQUIRE_NEAR(frame.right_V, 12.0, 1e-9);
+}
+
+ROBOT_TEST("automatic Quick Turn reaches full voltage in fifty milliseconds") {
+  const auto config = robot::make1690XCommissioningCurvatureConfig();
+  robot::CommissioningControlCycle cycle(config);
+  const auto mode = testMode();
+  robot::RawDriveInputs raw{};
+
+  robot::ActuatorFrame frame{};
+  for (std::uint32_t i = 0; i < 5; ++i) {
+    const robot::FrameHeader header{10000 + i * 10000, 1 + i, 7};
+    frame = cycle.update(header, mode, raw,
+                         controllerFor(header, 0, 0.0, 1.0),
+                         timingFor(header));
+    ROBOT_REQUIRE(frame.owner == robot::RequestSource::Test);
+    ROBOT_REQUIRE(frame.left_V > 0.0);
+    ROBOT_REQUIRE(frame.right_V < 0.0);
+  }
+  ROBOT_REQUIRE_NEAR(frame.left_V, 12.0, 1e-9);
+  ROBOT_REQUIRE_NEAR(frame.right_V, -12.0, 1e-9);
 }
 
 ROBOT_TEST("B and every commissioning stop path use nonlatched Coast") {

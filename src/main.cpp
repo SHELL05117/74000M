@@ -196,7 +196,7 @@ extern "C" void initialize() {
   }
   pros::lcd::set_text(4, "ALL STOPS = COAST");
   pros::lcd::set_text(5, "LEFT Y/X CURVATURE");
-  pros::lcd::set_text(6, "R1 QUICK / B COAST");
+  pros::lcd::set_text(6, "AUTO QUICK / B COAST");
 }
 
 extern "C" void disabled() {
