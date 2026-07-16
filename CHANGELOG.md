@@ -2,6 +2,10 @@
 
 This file records implementation commits in simple English. Dedicated `chore(log)` commits are intentionally omitted to avoid recursive log entries.
 
+## 2026-07-16
+
+- 889825fe28e698502aca16e3d9dfeacea638d2a7 — Switched the 1690X commissioning manual drive from Arcade to Curvature with R1 Quick Turn.
+
 ## 2026-07-15
 
 - 4cea04d385c16639334823e223b1b89fd7c25851 — Added the mandatory project guide, enforced it in the default agent rules, and created the English change log.
