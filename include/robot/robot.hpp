@@ -45,7 +45,7 @@
 #include "robot/manual/heading_assist.hpp"
 #include "robot/manual/input_shaping.hpp"
 #include "robot/manual/manual_drive.hpp"
-#include "robot/manual/commissioning_arcade.hpp"
+#include "robot/manual/commissioning_curvature.hpp"
 #include "robot/odometry/odometry.hpp"
 #include "robot/platform/hardware_self_test.hpp"
 #include "robot/platform/fake_io.hpp"

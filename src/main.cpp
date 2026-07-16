@@ -5,7 +5,7 @@
 #include "robot/core/snapshot_box.hpp"
 #include "robot/drive/output_service.hpp"
 #include "robot/hmi/render_models.hpp"
-#include "robot/manual/commissioning_arcade.hpp"
+#include "robot/manual/commissioning_curvature.hpp"
 #include "robot/platform/hardware_self_test.hpp"
 #include "robot/platform/pros_adapters.hpp"
 #include "robot/runtime/control_loop.hpp"
@@ -40,7 +40,7 @@ class RobotRuntime {
         timing_({config_.runtime.nominal_period_s,
                  config_.runtime.min_math_dt_s,
                  config_.runtime.max_math_dt_s, 0.015}),
-        cycle_(robot::make1690XCommissioningArcadeConfig()),
+        cycle_(robot::make1690XCommissioningCurvatureConfig()),
         control_loop_(clock_, drive_, controller_, competition_, modes_,
                       actuator_store_, timing_, cycle_, {10, true}),
         output_(drive_, {config_.runtime.output_ttl_us,
@@ -195,8 +195,8 @@ extern "C" void initialize() {
     pros::lcd::set_text(3, "READY: SELF CHECK OK");
   }
   pros::lcd::set_text(4, "ALL STOPS = COAST");
-  pros::lcd::set_text(5, "LEFT Y/X ARCADE");
-  pros::lcd::set_text(6, "B = HOLD TO COAST");
+  pros::lcd::set_text(5, "LEFT Y/X CURVATURE");
+  pros::lcd::set_text(6, "R1 QUICK / B COAST");
 }
 
 extern "C" void disabled() {
@@ -219,6 +219,6 @@ extern "C" void opcontrol() {
     pros::lcd::set_text(7, "DRIVE: LOCKED");
     return;
   }
-  pros::lcd::set_text(7, "TEST: DIRECT / B COAST");
+  pros::lcd::set_text(7, "TEST: CURVE / B COAST");
   runtime->runControl();
 }

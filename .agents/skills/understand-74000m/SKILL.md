@@ -15,7 +15,7 @@ Read this file completely before working in the repository. Then follow the stri
 - Current chassis: six motors, three per side, mixed 600 RPM and 200 RPM cartridges with external gearing normalized to the same nominal wheel speed.
 - Current executable composition: sensorless sample commissioning firmware, not competition-approved production firmware. IMU, tracking wheels, pose-good capability, autonomous motion, and competition routes remain locked; `autonomous()` is `DoNothing`.
 - All formal `RobotCapabilities` are false. The only output exception is the narrow `CommissioningControlCycle`, which enables `controlled_test_voltage` locally only in non-field `Test` mode and still uses the scheduler, arbiter, safety gate, TTLs, and sole output service.
-- Driver test: left-stick single-stick Arcade, 12 V command ceiling, Coast stops, hold `B` to force Coast.
+- Driver test: left-stick single-stick Curvature, hold `R1` for low-throttle Quick Turn, 12 V command ceiling, Coast stops, hold `B` to force Coast.
 - Startup: at least three seconds of self-check. The current profile intentionally declares no IMU, so every boot is expected to finish with a sensor warning, request three Controller rumble pulses, and display `X/Y/H:ERR`; any other unhealthy configured-device check uses the same warning event.
 - Source of current hardware truth: `include/robot/config/robot_config.hpp` plus the traceable manifest `config/hardware_profile.yaml`. The YAML is not loaded at runtime.
 
@@ -78,7 +78,7 @@ Key ownership rules:
 | `include/robot/sensors/` | Validation, filtering, port-level fault isolation |
 | `include/robot/drive/` | Request/output types, kinematics, allocation, Slew, safety gate, unique output service |
 | `include/robot/runtime/` | Mode lifecycle, control/output loops, timing, cross-task mailboxes |
-| `include/robot/manual/` | Input shaping, manual drive, heading assist, 1690X commissioning Arcade cycle |
+| `include/robot/manual/` | Input shaping, manual drive, heading assist, 1690X commissioning Curvature cycle |
 | `include/robot/commands/` | Static command scheduler, requirements, leases, request sink, command groups |
 | `include/robot/control/` | PID, feedforward, motion profiles, termination, chassis velocity controller |
 | `include/robot/odometry/` | IMU-first drive/tracking-wheel pose estimation |

@@ -121,7 +121,7 @@ Command / ManualDrive
 | API | 常用方法 | 定义位置 |
 |---|---|---|
 | `robot::ManualDrive` | `update()`、`reset()` | [`manual_drive.hpp`](include/robot/manual/manual_drive.hpp) |
-| `robot::CommissioningControlCycle` | 1690X 的 12 V 单杆 Arcade 真机调试链 | [`commissioning_arcade.hpp`](include/robot/manual/commissioning_arcade.hpp) |
+| `robot::CommissioningControlCycle` | 1690X 的 12 V 单杆 Curvature / Quick Turn 真机调试链 | [`commissioning_curvature.hpp`](include/robot/manual/commissioning_curvature.hpp) |
 | `robot::Odometry` | `update()`、`requestReset()` | [`odometry.hpp`](include/robot/odometry/odometry.hpp) |
 | `robot::EngineeringPid` | `update()`、`reset()` | [`engineering_pid.hpp`](include/robot/control/engineering_pid.hpp) |
 | `robot::ChassisVelocityController` | `update()`、`reset()` | [`chassis_velocity_controller.hpp`](include/robot/control/chassis_velocity_controller.hpp) |
@@ -254,7 +254,8 @@ Disabled
 | 控制周期 | `nominal_period_s`、数学 dt 范围 | `RuntimeConfig` / 同上 | 10 ms 是建议起点 |
 | TTL | `request_ttl_us`、`output_ttl_us` | `RuntimeConfig` / 同上 | 40 ms 是离线起点 |
 | 电压上限 | `max_command_voltage_V` | `ElectricalConfig` / 同上 | 当前 commissioning 上限 12 V；不得超过 V5 12 V 命令边界 |
-| 试车加速 | `throttle_rise_per_s`、`output_slew.rise_V_per_s` | [`make1690XCommissioningArcadeConfig()`](include/robot/manual/commissioning_arcade.hpp) | 当前快速候选 20/s、240 V/s；名义 0→12 V 约 0.05 s，待新一轮 HIL 复测 |
+| 试车驾驶 | `curvature_gain`、`quick_turn_gain`、`quick_turn_max_throttle` | [`make1690XCommissioningCurvatureConfig()`](include/robot/manual/commissioning_curvature.hpp) | 左 Y/X 单杆 Curvature；R1 Quick Turn；增益和 0.2 油门门限待 HIL 调整 |
+| 试车加速 | `throttle_rise_per_s`、`output_slew.rise_V_per_s` | 同上 | 当前快速候选 20/s、240 V/s；名义 0→12 V 约 0.05 s，待新一轮 HIL 复测 |
 | 能力开关 | `RobotCapabilities` | `RobotConfig` / 同上 | 当前全部锁定 |
 
 [`config/hardware_profile.yaml`](config/hardware_profile.yaml) 中的 `null` 表示仍需实机或 CAD 数据，不应随意填入“看起来合理”的值。
@@ -273,7 +274,7 @@ Disabled
 | 输出 Slew | `rise_V_per_s`、`fall_V_per_s`、`max_dt_s` | [`OutputSlewConfig`](include/robot/drive/output_slew.hpp) |
 | 摇杆曲线 | `center_offset`、`deadband`、`cubic_weight` | [`AxisShapeConfig`](include/robot/manual/input_shaping.hpp) |
 | 手动驾驶 | 轴映射、输入 Slew、曲率、Quick Turn、TTL | [`ManualDriveConfig`](include/robot/manual/manual_drive.hpp) |
-| 样机试车 | B 按住 Coast、左 Y/X、12 V、Slew、TTL | [`CommissioningArcadeConfig`](include/robot/manual/commissioning_arcade.hpp) |
+| 样机试车 | 左 Y/X Curvature、R1 Quick Turn、B 按住 Coast、12 V、Slew、TTL | [`CommissioningCurvatureConfig`](include/robot/manual/commissioning_curvature.hpp) |
 | 航向辅助 | 进入/退出门、`kP/kD`、最大修正、质量要求 | [`HeadingAssistConfig`](include/robot/manual/heading_assist.hpp) |
 | 传感器校验 | 范围、变化率、年龄、冻结、恢复样本 | [`SensorValidatorConfig`](include/robot/sensors/sensor_validator.hpp) |
 | 里程计 | 布局、轮比例、轮距、tracking 外参、滑移确认 | [`OdometryConfig`](include/robot/odometry/odometry.hpp) |

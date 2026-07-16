@@ -18,7 +18,7 @@ enum class CommissioningDriveState : std::uint8_t {
 
 inline constexpr StopMode kCommissioningStopMode = StopMode::Coast;
 
-struct CommissioningArcadeConfig {
+struct CommissioningCurvatureConfig {
   AxisShapeConfig throttle_shape{};
   AxisShapeConfig turn_shape{};
   double throttle_rise_per_s{};
@@ -26,14 +26,19 @@ struct CommissioningArcadeConfig {
   double turn_rise_per_s{};
   double turn_fall_per_s{};
   double max_dt_s{};
+  double curvature_gain{};
+  double quick_turn_gain{};
+  double quick_turn_max_throttle{};
   double max_voltage_V{};
   TimeUs request_ttl_us{};
+  std::uint32_t quick_turn_button{};
   std::uint32_t coast_button{};
   OutputSlewConfig output_slew{};
 };
 
-inline CommissioningArcadeConfig make1690XCommissioningArcadeConfig() {
-  CommissioningArcadeConfig config{};
+inline CommissioningCurvatureConfig
+make1690XCommissioningCurvatureConfig() {
+  CommissioningCurvatureConfig config{};
   config.throttle_shape = {0.0, 0.06, 0.15};
   config.turn_shape = {0.0, 0.06, 0.15};
   config.throttle_rise_per_s = 20.0;
@@ -41,8 +46,12 @@ inline CommissioningArcadeConfig make1690XCommissioningArcadeConfig() {
   config.turn_rise_per_s = 4.0;
   config.turn_fall_per_s = 8.0;
   config.max_dt_s = 0.05;
+  config.curvature_gain = 1.0;
+  config.quick_turn_gain = 1.0;
+  config.quick_turn_max_throttle = 0.2;
   config.max_voltage_V = 12.0;
   config.request_ttl_us = 30000;
+  config.quick_turn_button = kButtonR1;
   config.coast_button = kButtonB;
   // Fast HIL candidate: full forward reaches the legal 12 V command ceiling
   // in about 50 ms. Falling/reversal behavior stays conservative.
@@ -50,8 +59,8 @@ inline CommissioningArcadeConfig make1690XCommissioningArcadeConfig() {
   return config;
 }
 
-inline bool validCommissioningArcadeConfig(
-    const CommissioningArcadeConfig& config) noexcept {
+inline bool validCommissioningCurvatureConfig(
+    const CommissioningCurvatureConfig& config) noexcept {
   return validAxisShape(config.throttle_shape) &&
          validAxisShape(config.turn_shape) &&
          std::isfinite(config.throttle_rise_per_s) &&
@@ -63,35 +72,46 @@ inline bool validCommissioningArcadeConfig(
          std::isfinite(config.turn_fall_per_s) &&
          config.turn_fall_per_s > 0.0 &&
          std::isfinite(config.max_dt_s) && config.max_dt_s > 0.0 &&
+         std::isfinite(config.curvature_gain) &&
+         config.curvature_gain > 0.0 && config.curvature_gain <= 1.0 &&
+         std::isfinite(config.quick_turn_gain) &&
+         config.quick_turn_gain > 0.0 && config.quick_turn_gain <= 1.0 &&
+         std::isfinite(config.quick_turn_max_throttle) &&
+         config.quick_turn_max_throttle >= 0.0 &&
+         config.quick_turn_max_throttle <= 1.0 &&
          std::isfinite(config.max_voltage_V) &&
          config.max_voltage_V > 0.0 && config.max_voltage_V <= 12.0 &&
-         config.request_ttl_us > 0 && config.coast_button != 0 &&
+         config.request_ttl_us > 0 && config.quick_turn_button != 0 &&
+         config.coast_button != 0 &&
+         config.quick_turn_button != config.coast_button &&
          AsymmetricVoltageSlew(config.output_slew).valid();
 }
 
-struct CommissioningArcadeResult {
+struct CommissioningCurvatureResult {
   DriveRequest request{};
   CommissioningDriveState state{CommissioningDriveState::Coasting};
   double shaped_throttle{};
   double shaped_turn{};
+  bool quick_turn_requested{};
+  bool quick_turn_active{};
   bool valid{};
 };
 
-class CommissioningArcadeMapper {
+class CommissioningCurvatureMapper {
  public:
-  explicit CommissioningArcadeMapper(
-      CommissioningArcadeConfig config) noexcept
+  explicit CommissioningCurvatureMapper(
+      CommissioningCurvatureConfig config) noexcept
       : config_(config),
         throttle_slew_(config.throttle_rise_per_s,
                        config.throttle_fall_per_s, config.max_dt_s),
         turn_slew_(config.turn_rise_per_s, config.turn_fall_per_s,
                    config.max_dt_s) {}
 
-  CommissioningArcadeResult update(
+  CommissioningCurvatureResult update(
       const FrameHeader& header, const ModeSnapshot& mode,
       const ControllerSnapshot& controller, double dt_s,
       const OwnerToken& owner) noexcept {
-    CommissioningArcadeResult result{};
+    CommissioningCurvatureResult result{};
     if (header.mode_epoch != epoch_) reset(header.mode_epoch);
 
     const bool valid_frame =
@@ -106,7 +126,7 @@ class CommissioningArcadeMapper {
                             mode.mode == CompetitionMode::Test &&
                             !mode.field_connected &&
                             mode.epoch == header.mode_epoch;
-    if (!validCommissioningArcadeConfig(config_) || !valid_frame ||
+    if (!validCommissioningCurvatureConfig(config_) || !valid_frame ||
         !valid_owner || !valid_mode || !controller.connected ||
         !controller.api_ok || !std::isfinite(dt_s) || dt_s < 0.0 ||
         dt_s > config_.max_dt_s) {
@@ -149,15 +169,39 @@ class CommissioningArcadeMapper {
       return result;
     }
 
-    // Single-left-stick Arcade: positive Left X requests a right turn.
+    result.quick_turn_requested =
+        (controller.buttons & config_.quick_turn_button) != 0;
+    result.quick_turn_active =
+        result.quick_turn_requested &&
+        std::abs(throttle_target) <= config_.quick_turn_max_throttle;
+
+    // Single-left-stick Curvature: normal steering scales with |throttle|.
+    // Positive Left X requests a right turn. R1 explicitly enables low-speed
+    // Quick Turn without changing the downstream Test/safety/output chain.
+    const double differential_turn = std::clamp(
+        result.shaped_turn *
+            (result.quick_turn_active
+                 ? config_.quick_turn_gain
+                 : std::abs(result.shaped_throttle) *
+                       config_.curvature_gain),
+        -1.0, 1.0);
     const WheelVoltages normalized{
-        result.shaped_throttle + result.shaped_turn,
-        result.shaped_throttle - result.shaped_turn};
+        result.shaped_throttle + differential_turn,
+        result.shaped_throttle - differential_turn};
     const VoltageAllocation allocation =
         desaturateProportional(normalized, 1.0);
     if (!allocation.valid) {
       resetSlew();
       state_ = CommissioningDriveState::Coasting;
+      result.state = state_;
+      return result;
+    }
+
+    if (allocation.output.left_V == 0.0 &&
+        allocation.output.right_V == 0.0) {
+      state_ = CommissioningDriveState::Coasting;
+      result.request = makeCoastRequest(header, owner);
+      result.valid = true;
       result.state = state_;
       return result;
     }
@@ -202,7 +246,7 @@ class CommissioningArcadeMapper {
     turn_slew_.reset();
   }
 
-  CommissioningArcadeConfig config_{};
+  CommissioningCurvatureConfig config_{};
   AsymmetricAxisSlew throttle_slew_;
   AsymmetricAxisSlew turn_slew_;
   std::uint32_t epoch_{};
@@ -245,7 +289,7 @@ class CommissioningDriveLeaseCommand final : public Command {
 // false; only a bounded RequestSource::Test voltage payload is enabled here.
 class CommissioningControlCycle final : public ControlCycle {
  public:
-  explicit CommissioningControlCycle(CommissioningArcadeConfig config)
+  explicit CommissioningControlCycle(CommissioningCurvatureConfig config)
       : config_(config),
         mapper_(config),
         arbiter_({config.request_ttl_us}),
@@ -273,7 +317,7 @@ class CommissioningControlCycle final : public ControlCycle {
     }
 
     sink_.beginFrame(header);
-    const CommissioningArcadeResult mapped = mapper_.update(
+    const CommissioningCurvatureResult mapped = mapper_.update(
         header, mode, controller, timing.math_dt_s,
         lease_command_.owner());
     if (!controller_ready) {
@@ -301,7 +345,7 @@ class CommissioningControlCycle final : public ControlCycle {
 
  private:
   static SafetyGateConfig makeSafetyConfig(
-      const CommissioningArcadeConfig& config) noexcept {
+      const CommissioningCurvatureConfig& config) noexcept {
     return {config.max_voltage_V,
             config.request_ttl_us,
             config.output_slew,
@@ -310,8 +354,8 @@ class CommissioningControlCycle final : public ControlCycle {
             kCommissioningStopMode};
   }
 
-  CommissioningArcadeConfig config_{};
-  CommissioningArcadeMapper mapper_;
+  CommissioningCurvatureConfig config_{};
+  CommissioningCurvatureMapper mapper_;
   StaticScheduler<1> scheduler_{Requirement::kDrivetrain};
   CommissioningDriveLeaseCommand lease_command_{};
   DriveRequestSink sink_{};
