@@ -4,6 +4,7 @@ This file records implementation commits in simple English. Dedicated `chore(log
 
 ## 2026-07-16
 
+- 2f2db8e4a9ba508e8cb86d3dfce61c06edc80c73 — Added automatic full-gain Quick Turn with aggressive 50 ms response and removed team identifiers from the README.
 - 889825fe28e698502aca16e3d9dfeacea638d2a7 — Switched the 1690X commissioning manual drive from Arcade to Curvature with R1 Quick Turn.
 
 ## 2026-07-15
