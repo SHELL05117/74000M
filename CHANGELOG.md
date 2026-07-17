@@ -2,6 +2,10 @@
 
 This file records implementation commits in simple English. Dedicated `chore(log)` commits are intentionally omitted to avoid recursive log entries.
 
+## 2026-07-17
+
+- fb85ec4e0b8866d1e2c84033e6f682e10a6f7f41 — Made the commissioning throttle linear and able to reach full voltage in one nominal control frame.
+
 ## 2026-07-16
 
 - 2f2db8e4a9ba508e8cb86d3dfce61c06edc80c73 — Added automatic full-gain Quick Turn with aggressive 50 ms response and removed team identifiers from the README.
