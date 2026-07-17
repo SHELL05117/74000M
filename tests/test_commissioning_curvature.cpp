@@ -225,12 +225,14 @@ ROBOT_TEST("commissioning Curvature keeps wheel ratio when saturated") {
 ROBOT_TEST("commissioning cycle drives through Test safety gate at twelve volts") {
   const auto config = robot::make1690XCommissioningCurvatureConfig();
   ROBOT_REQUIRE_NEAR(config.max_voltage_V, 12.0, 1e-12);
-  ROBOT_REQUIRE_NEAR(config.throttle_rise_per_s, 20.0, 1e-12);
-  ROBOT_REQUIRE_NEAR(config.throttle_fall_per_s, 20.0, 1e-12);
-  ROBOT_REQUIRE_NEAR(config.turn_rise_per_s, 20.0, 1e-12);
-  ROBOT_REQUIRE_NEAR(config.turn_fall_per_s, 20.0, 1e-12);
-  ROBOT_REQUIRE_NEAR(config.output_slew.rise_V_per_s, 240.0, 1e-12);
-  ROBOT_REQUIRE_NEAR(config.output_slew.fall_V_per_s, 240.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(config.throttle_shape.cubic_weight, 0.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(config.turn_shape.cubic_weight, 0.15, 1e-12);
+  ROBOT_REQUIRE_NEAR(config.throttle_rise_per_s, 100.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(config.throttle_fall_per_s, 100.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(config.turn_rise_per_s, 100.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(config.turn_fall_per_s, 100.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(config.output_slew.rise_V_per_s, 1200.0, 1e-12);
+  ROBOT_REQUIRE_NEAR(config.output_slew.fall_V_per_s, 1200.0, 1e-12);
   robot::CommissioningControlCycle cycle(config);
   const auto mode = testMode();
   robot::RawDriveInputs raw{};
@@ -240,44 +242,45 @@ ROBOT_TEST("commissioning cycle drives through Test safety gate at twelve volts"
                             controllerFor(start, 0, 1.0, 0.0),
                             timingFor(start));
   ROBOT_REQUIRE(frame.owner == robot::RequestSource::Test);
-  ROBOT_REQUIRE_NEAR(frame.left_V, 2.4, 1e-9);
-  ROBOT_REQUIRE_NEAR(frame.right_V, 2.4, 1e-9);
-  ROBOT_REQUIRE(std::abs(frame.left_V) <= 12.0);
-  ROBOT_REQUIRE(std::abs(frame.right_V) <= 12.0);
-
-  for (std::uint32_t i = 0; i < 3; ++i) {
-    const robot::FrameHeader full{20000 + i * 10000, 2 + i, 7};
-    frame = cycle.update(full, mode, raw,
-                         controllerFor(full, 0, 1.0, 0.0),
-                         timingFor(full));
-  }
-  ROBOT_REQUIRE_NEAR(frame.left_V, 9.6, 1e-9);
-  ROBOT_REQUIRE_NEAR(frame.right_V, 9.6, 1e-9);
-
-  const robot::FrameHeader full{50000, 5, 7};
-  frame = cycle.update(full, mode, raw,
-                       controllerFor(full, 0, 1.0, 0.0),
-                       timingFor(full));
   ROBOT_REQUIRE_NEAR(frame.left_V, 12.0, 1e-9);
   ROBOT_REQUIRE_NEAR(frame.right_V, 12.0, 1e-9);
+  ROBOT_REQUIRE(std::abs(frame.left_V) <= 12.0);
+  ROBOT_REQUIRE(std::abs(frame.right_V) <= 12.0);
 }
 
-ROBOT_TEST("automatic Quick Turn reaches full voltage in fifty milliseconds") {
+ROBOT_TEST("linear throttle preserves near-endpoint voltage") {
+  const auto config = robot::make1690XCommissioningCurvatureConfig();
+  robot::CommissioningCurvatureMapper mapper(config);
+  const robot::OwnerToken owner{42, robot::Requirement::kDrivetrain, 3, 7};
+  const auto mode = testMode();
+  const robot::FrameHeader header{10000, 1, 7};
+  constexpr double kOriginalAxis = 120.0 / 127.0;
+  const auto result = mapper.update(
+      header, mode, controllerFor(header, 0, kOriginalAxis, 0.0), 0.01,
+      owner);
+  ROBOT_REQUIRE(result.valid);
+  const auto* payload =
+      std::get_if<robot::WheelVoltagePayload>(&result.request.payload);
+  ROBOT_REQUIRE(payload != nullptr);
+  const double remapped =
+      (kOriginalAxis - config.throttle_shape.deadband) /
+      (1.0 - config.throttle_shape.deadband);
+  ROBOT_REQUIRE_NEAR(payload->left_V, remapped * 12.0, 1e-9);
+  ROBOT_REQUIRE_NEAR(payload->right_V, remapped * 12.0, 1e-9);
+  ROBOT_REQUIRE(payload->left_V > 11.29);
+}
+
+ROBOT_TEST("automatic Quick Turn reaches full voltage in one nominal frame") {
   const auto config = robot::make1690XCommissioningCurvatureConfig();
   robot::CommissioningControlCycle cycle(config);
   const auto mode = testMode();
   robot::RawDriveInputs raw{};
 
-  robot::ActuatorFrame frame{};
-  for (std::uint32_t i = 0; i < 5; ++i) {
-    const robot::FrameHeader header{10000 + i * 10000, 1 + i, 7};
-    frame = cycle.update(header, mode, raw,
-                         controllerFor(header, 0, 0.0, 1.0),
-                         timingFor(header));
-    ROBOT_REQUIRE(frame.owner == robot::RequestSource::Test);
-    ROBOT_REQUIRE(frame.left_V > 0.0);
-    ROBOT_REQUIRE(frame.right_V < 0.0);
-  }
+  const robot::FrameHeader header{10000, 1, 7};
+  const auto frame = cycle.update(header, mode, raw,
+                                  controllerFor(header, 0, 0.0, 1.0),
+                                  timingFor(header));
+  ROBOT_REQUIRE(frame.owner == robot::RequestSource::Test);
   ROBOT_REQUIRE_NEAR(frame.left_V, 12.0, 1e-9);
   ROBOT_REQUIRE_NEAR(frame.right_V, -12.0, 1e-9);
 }

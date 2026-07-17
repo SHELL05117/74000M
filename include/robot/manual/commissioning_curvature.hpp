@@ -39,12 +39,15 @@ struct CommissioningCurvatureConfig {
 inline CommissioningCurvatureConfig
 make1690XCommissioningCurvatureConfig() {
   CommissioningCurvatureConfig config{};
-  config.throttle_shape = {0.0, 0.06, 0.15};
+  // Match the original 1690X driver's linear throttle response while keeping
+  // a remapped neutral deadband. Turn retains mild cubic shaping because
+  // Curvature already provides the requested high-speed steering semantics.
+  config.throttle_shape = {0.0, 0.06, 0.0};
   config.turn_shape = {0.0, 0.06, 0.15};
-  config.throttle_rise_per_s = 20.0;
-  config.throttle_fall_per_s = 20.0;
-  config.turn_rise_per_s = 20.0;
-  config.turn_fall_per_s = 20.0;
+  config.throttle_rise_per_s = 100.0;
+  config.throttle_fall_per_s = 100.0;
+  config.turn_rise_per_s = 100.0;
+  config.turn_fall_per_s = 100.0;
   config.max_dt_s = 0.05;
   config.curvature_gain = 1.0;
   config.quick_turn_gain = 1.0;
@@ -54,8 +57,9 @@ make1690XCommissioningCurvatureConfig() {
   config.request_ttl_us = 30000;
   config.coast_button = kButtonB;
   // Aggressive HIL candidate: throttle, turn, and final voltage can reach the
-  // legal full-scale command in about 50 ms while retaining bounded Slew.
-  config.output_slew = {240.0, 240.0, 0.05};
+  // legal full-scale command in one nominal 10 ms frame while retaining a
+  // finite Slew boundary and the hard 12 V command ceiling.
+  config.output_slew = {1200.0, 1200.0, 0.05};
   return config;
 }
 

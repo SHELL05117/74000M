@@ -85,9 +85,11 @@ capabilities:
 
 commissioning_test:
   enabled_in_non_field_opcontrol: true
-  tuning_revision: 4
+  tuning_revision: 5
   maximum_voltage_V: 12.0
   controller_mapping: "Left Y throttle; Left X curvature; single-stick Curvature"
+  throttle_cubic_weight: 0.0
+  turn_cubic_weight: 0.15
   curvature_gain: 1.0
   quick_turn_gain: 1.0
   quick_turn_trigger: "automatic while Left X is nonzero and throttle is within the hysteresis gate"
@@ -96,11 +98,11 @@ commissioning_test:
   arming: "none; drive is active immediately in non-field opcontrol"
   coast_button: "B; hold for immediate Coast, release to resume stick control"
   zero_behavior: "Coast for neutral, B, disabled, disconnect, request stale, and output stale"
-  throttle_rise_per_s: 20.0
-  throttle_fall_per_s: 20.0
-  turn_rise_per_s: 20.0
-  turn_fall_per_s: 20.0
-  output_rise_V_per_s: 240.0
-  output_fall_V_per_s: 240.0
-  nominal_full_scale_ramp_s: 0.05
-  tuning_status: "Automatic full-gain Quick Turn and 50 ms full-scale response are aggressive HIL candidates; retest required"
+  throttle_rise_per_s: 100.0
+  throttle_fall_per_s: 100.0
+  turn_rise_per_s: 100.0
+  turn_fall_per_s: 100.0
+  output_rise_V_per_s: 1200.0
+  output_fall_V_per_s: 1200.0
+  nominal_full_scale_ramp_s: 0.01
+  tuning_status: "Linear throttle and one-frame full-scale response are aggressive HIL candidates; retest required"
