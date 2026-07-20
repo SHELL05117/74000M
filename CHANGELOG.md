@@ -4,6 +4,7 @@ This file records implementation commits in simple English. Dedicated `chore(log
 
 ## 2026-07-20
 
+- 1aa41ea9cff09736a04b82e25236ac39868ed477 — Added schema 3.1 causal trace logging for all currently available recording signals.
 - 39cfe0e7610857c92457371450c25e5a99aa44c6 — Added the streaming V5L integrity inspector for TF card recordings.
 - 8d09e40f9455a02b290170df4df8b5a8930c39d5 — Added identity-bound V5L2 flight recording, global one-shot Coast events, and offline recovery verification.
 - a6a9d4c5fb981f7a4eea9a1c5998a575431ecda1 — Added controller-triggered flight recording with one-shot Coast and recoverable TF card logs.
