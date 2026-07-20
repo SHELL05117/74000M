@@ -2,6 +2,10 @@
 
 This file records implementation commits in simple English. Dedicated `chore(log)` commits are intentionally omitted to avoid recursive log entries.
 
+## 2026-07-20
+
+- ee3cf1ca398cc76f081c14677e4f1e2258c0e749 — Added the VEX V5 PC status monitoring, recording, analysis, and tuning system implementation plan.
+
 ## 2026-07-17
 
 - fb85ec4e0b8866d1e2c84033e6f682e10a6f7f41 — Made the commissioning throttle linear and able to reach full voltage in one nominal control frame.
