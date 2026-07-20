@@ -374,6 +374,8 @@ class CommissioningControlCycle final : public ControlCycle {
     }};
     const ArbitrationResult selected = arbiter_.select(
         candidates, mode, header.time_us, capabilities_, scheduler_);
+    last_arbitration_ = selected;
+    last_request_present_ = request_present;
     const DriveRequest* selected_request =
         selected.has_selection ? &selected.selected : nullptr;
     const SafetyGateInput gate_input{header, mode, header.time_us,
@@ -386,7 +388,45 @@ class CommissioningControlCycle final : public ControlCycle {
   CommissioningDriveState state() const noexcept { return mapper_.state(); }
 
   void populateLogFrame(LogFrame& frame) const noexcept override {
+    frame.trace.availability_bits |=
+        kTraceArbitration | kTraceActuatorIntent;
+    frame.trace.arbitration_reject_bits =
+        last_arbitration_.reject_bits;
+    frame.trace.arbitration_rejected_count =
+        last_arbitration_.rejected_count;
+    frame.trace.request_candidate_present = last_request_present_;
+    frame.trace.request_selected = last_arbitration_.has_selection;
+    frame.trace.drive_state =
+        static_cast<std::uint8_t>(last_mapped_.state);
+    frame.trace.stop_mode =
+        static_cast<std::uint8_t>(last_actuator_.zero_behavior);
+    frame.trace.output_derate = 1.0;
+    frame.actuator.derate_target = 1.0;
+    frame.actuator.derate_applied = 1.0;
+    frame.request.reject_bits = last_arbitration_.reject_bits;
+
+    if (last_arbitration_.has_selection) {
+      const DriveRequest& selected = last_arbitration_.selected;
+      frame.trace.selected_request_sequence = selected.h.sequence;
+      frame.trace.selected_owner_lease =
+          selected.owner.lease_generation;
+      frame.trace.selected_source =
+          static_cast<std::uint8_t>(selected.source);
+      if (selected.h.time_us <= frame.header.time_us) {
+        frame.trace.request_age_us =
+            frame.header.time_us - selected.h.time_us;
+        frame.timing.request_age_us = frame.trace.request_age_us;
+      }
+    }
+
     if (!last_mapped_.valid) return;
+    frame.trace.availability_bits |= kTraceDriverMapping;
+    frame.trace.mapped_throttle = last_mapped_.shaped_throttle;
+    frame.trace.mapped_turn = last_mapped_.shaped_turn;
+    frame.trace.quick_turn_active = last_mapped_.quick_turn_active;
+    if (last_request_present_)
+      frame.trace.availability_bits |= kTraceRequestCandidate;
+
     const DriveRequest& request = last_mapped_.request;
     frame.request.source = static_cast<std::uint8_t>(request.source);
     frame.request.owner_id =
@@ -394,6 +434,8 @@ class CommissioningControlCycle final : public ControlCycle {
     frame.request.owner_lease = request.owner.lease_generation;
     frame.request.request_time_us = request.h.time_us;
     frame.request.ttl_us = request.ttl_us;
+    frame.request.forward = last_mapped_.shaped_throttle;
+    frame.request.steering = last_mapped_.shaped_turn;
     if (const auto* voltage =
             std::get_if<WheelVoltagePayload>(&request.payload)) {
       frame.request.payload_kind = 1;
@@ -428,9 +470,11 @@ class CommissioningControlCycle final : public ControlCycle {
   DriveCapabilities capabilities_{};
   RobotState state_{};
   CommissioningCurvatureResult last_mapped_{};
+  ArbitrationResult last_arbitration_{};
   ActuatorFrame last_actuator_{};
   std::uint32_t received_global_event_bits_{};
   std::uint32_t consumed_global_event_bits_{};
+  bool last_request_present_{};
 };
 
 }  // namespace robot

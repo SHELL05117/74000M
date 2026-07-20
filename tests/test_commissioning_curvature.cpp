@@ -248,6 +248,48 @@ ROBOT_TEST("commissioning cycle drives through Test safety gate at twelve volts"
   ROBOT_REQUIRE(std::abs(frame.right_V) <= 12.0);
 }
 
+ROBOT_TEST("commissioning log preserves mapping arbitration and final intent") {
+  const auto config = directMappingConfig();
+  robot::CommissioningControlCycle cycle(config);
+  const auto mode = testMode();
+  robot::RawDriveInputs raw{};
+  const robot::FrameHeader header{10000, 1, 7};
+  const auto actuator = cycle.update(
+      header, mode, raw, controllerFor(header, 0, 0.10, 0.50),
+      timingFor(header));
+  robot::LogFrame log = robot::makeControlLogFrame(
+      header, 42, mode, raw,
+      controllerFor(header, 0, 0.10, 0.50), actuator,
+      timingFor(header), 0, 0, header.time_us);
+  cycle.populateLogFrame(log);
+
+  ROBOT_REQUIRE(
+      (log.trace.availability_bits & robot::kTraceDriverMapping) != 0);
+  ROBOT_REQUIRE(
+      (log.trace.availability_bits & robot::kTraceRequestCandidate) != 0);
+  ROBOT_REQUIRE(
+      (log.trace.availability_bits & robot::kTraceArbitration) != 0);
+  ROBOT_REQUIRE(log.trace.request_candidate_present);
+  ROBOT_REQUIRE(log.trace.request_selected);
+  ROBOT_REQUIRE(log.trace.arbitration_reject_bits == 0);
+  ROBOT_REQUIRE(log.trace.arbitration_rejected_count == 0);
+  ROBOT_REQUIRE(log.trace.selected_request_sequence == header.sequence);
+  ROBOT_REQUIRE(log.trace.selected_source ==
+                static_cast<std::uint8_t>(robot::RequestSource::Test));
+  ROBOT_REQUIRE(log.trace.quick_turn_active);
+  ROBOT_REQUIRE_NEAR(log.trace.mapped_throttle, 0.10, 1e-12);
+  ROBOT_REQUIRE_NEAR(log.trace.mapped_turn, 0.50, 1e-12);
+  ROBOT_REQUIRE_NEAR(log.request.forward, 0.10, 1e-12);
+  ROBOT_REQUIRE_NEAR(log.request.steering, 0.50, 1e-12);
+  ROBOT_REQUIRE(log.request.reject_bits == 0);
+  ROBOT_REQUIRE(log.timing.request_age_us == 0);
+  ROBOT_REQUIRE(log.trace.stop_mode ==
+                static_cast<std::uint8_t>(robot::StopMode::Coast));
+  ROBOT_REQUIRE_NEAR(log.actuator.final_left_V, actuator.left_V, 1e-12);
+  ROBOT_REQUIRE_NEAR(log.actuator.final_right_V, actuator.right_V, 1e-12);
+  ROBOT_REQUIRE_NEAR(log.actuator.derate_applied, 1.0, 1e-12);
+}
+
 ROBOT_TEST("linear throttle preserves near-endpoint voltage") {
   const auto config = robot::make1690XCommissioningCurvatureConfig();
   robot::CommissioningCurvatureMapper mapper(config);

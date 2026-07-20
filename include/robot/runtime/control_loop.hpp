@@ -105,13 +105,25 @@ class ControlLoop {
 
     if (modes_.boundaryStopPending())
       modes_.acknowledgeBoundaryStop(header.mode_epoch);
-    timing_.finish(sample, clock_.nowUs());
+    const TimeUs finish_us = clock_.nowUs();
+    timing_.finish(sample, finish_us);
+    if (sample.deadline_missed && overrun_total_ != UINT32_MAX)
+      ++overrun_total_;
     if (recorder_ != nullptr) {
       LogFrame log = makeControlLogFrame(
-          header, run_id_hash_, mode, raw, controller, frame, sample, 0, 0);
+          header, run_id_hash_, mode, raw, controller, frame, sample, 0, 0,
+          finish_us);
+      log.timing.overrun_total = overrun_total_;
+      log.trace.availability_bits |= kTraceCompetitionInput;
+      log.trace.competition_disabled = competition.disabled;
+      log.trace.competition_autonomous = competition.autonomous;
+      log.trace.competition_api_ok = competition.api_ok;
       OutputStatus status{};
       if (output_status_ != nullptr &&
           output_status_->readLatest(status)) {
+        log.trace.availability_bits |= kTraceOutputStatus;
+        log.trace.output_action =
+            static_cast<std::uint8_t>(status.action);
         log.actuator.last_written_sequence = status.actuator_sequence;
         log.actuator.write_attempted = status.write_attempted;
         log.actuator.write_ok = status.io_ok;
@@ -151,6 +163,7 @@ class ControlLoop {
   const OutputStatusStore* output_status_{};
   GlobalControlEventDetector global_event_detector_{};
   std::uint32_t sequence_{};
+  std::uint32_t overrun_total_{};
 };
 
 }  // namespace robot

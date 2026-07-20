@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 
@@ -58,13 +59,59 @@ inline void copyMotorLog(const MotorSample& source,
   destination.api_faults = source.faults;
 }
 
+inline TimeUs telemetrySampleAge(TimeUs observation_time_us,
+                                 const ScalarSample& sample) noexcept {
+  return sample.sample_time_us <= observation_time_us
+             ? observation_time_us - sample.sample_time_us
+             : 0;
+}
+
+inline TimeUs oldestRawSampleAge(
+    const RawDriveInputs& raw, TimeUs observation_time_us) noexcept {
+  TimeUs maximum_age{};
+  auto observe = [&](const ScalarSample& sample) {
+    maximum_age = std::max(
+        maximum_age, telemetrySampleAge(observation_time_us, sample));
+  };
+  for (const auto& motor : raw.left.motor) {
+    if (motor.smart_port == 0) continue;
+    observe(motor.position_rad);
+    observe(motor.velocity_radps);
+    observe(motor.current_A);
+    observe(motor.temperature_C);
+    observe(motor.applied_voltage_V);
+  }
+  for (const auto& motor : raw.right.motor) {
+    if (motor.smart_port == 0) continue;
+    observe(motor.position_rad);
+    observe(motor.velocity_radps);
+    observe(motor.current_A);
+    observe(motor.temperature_C);
+    observe(motor.applied_voltage_V);
+  }
+  if (raw.imu.status_api_ok) {
+    observe(raw.imu.rotation_rad);
+    observe(raw.imu.yaw_rate_radps);
+  }
+  for (const auto& tracking : raw.tracking) {
+    if (!tracking.configured) continue;
+    observe(tracking.position_rad);
+    observe(tracking.velocity_radps);
+  }
+  if (raw.battery_V.api_ok) observe(raw.battery_V);
+  return maximum_age;
+}
+
 inline LogFrame makeControlLogFrame(
     const FrameHeader& header, std::uint32_t run_id_hash,
     const ModeSnapshot& mode, const RawDriveInputs& raw,
     const ControllerSnapshot& controller, const ActuatorFrame& actuator,
     const TimingSample& timing, std::uint32_t ring_depth,
-    std::uint32_t dropped) noexcept {
+    std::uint32_t dropped,
+    TimeUs observation_time_us = 0) noexcept {
   LogFrame frame = makeEmptyLogFrame(header, run_id_hash);
+  if (observation_time_us == 0)
+    observation_time_us = raw.acquisition_end_us;
   for (std::size_t index = 0; index < kMotorsPerSide; ++index) {
     copyMotorLog(raw.left.motor[index], frame.left_motor[index]);
     copyMotorLog(raw.right.motor[index], frame.right_motor[index]);
@@ -125,9 +172,24 @@ inline LogFrame makeControlLogFrame(
   frame.timing.math_dt_s = timing.math_dt_s;
   frame.timing.exec_s = timing.exec_s;
   frame.timing.jitter_s = timing.jitter_s;
+  frame.timing.sensor_age_us =
+      oldestRawSampleAge(raw, observation_time_us);
+  frame.timing.actuator_age_us =
+      actuator.h.time_us <= observation_time_us
+          ? observation_time_us - actuator.h.time_us
+          : 0;
   frame.timing.consecutive_overruns = timing.consecutive_misses;
   frame.timing.ring_depth = ring_depth;
   frame.timing.log_dropped_total = dropped;
+  frame.trace.availability_bits =
+      kTraceRawInputs | kTraceActuatorIntent;
+  frame.trace.mode_transition_time_us = mode.transition_time_us;
+  frame.trace.mode_fault_bits = mode.fault_bits;
+  frame.trace.stop_mode =
+      static_cast<std::uint8_t>(actuator.zero_behavior);
+  frame.trace.selected_source =
+      static_cast<std::uint8_t>(actuator.owner);
+  frame.trace.deadline_missed = timing.deadline_missed;
   return frame;
 }
 
@@ -153,13 +215,21 @@ class FlightRecorderProducer final : public FlightRecorderPort {
     if (observed.session_sequence != 0)
       frame.header.run_id_hash =
           recordingRunId(boot_id_, observed.session_sequence);
-    frame.timing.ring_depth = static_cast<std::uint32_t>(ring_.depth());
+    const std::size_t ring_depth = ring_.depth();
+    frame.timing.ring_depth = static_cast<std::uint32_t>(ring_depth);
     frame.timing.log_dropped_total = ring_.dropped();
 
     const bool capture =
         observed.state == RecordingState::Opening ||
         observed.state == RecordingState::Recording ||
         (observed.event_bits & kRecordingStopRequested) != 0;
+    const std::size_t prospective_depth =
+        capture && ring_depth < ring_.usableCapacity()
+            ? ring_depth + 1
+            : ring_depth;
+    frame.trace.ring_high_watermark =
+        static_cast<std::uint32_t>(std::max(
+            ring_.highWatermark(), prospective_depth));
     if (capture) ring_.tryPush(frame);
     last_state_ = observed.state;
   }

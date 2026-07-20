@@ -1,6 +1,6 @@
 # VEX V5 飞行记录、赛后自动诊断与调参证据系统终极策划案
 
-> 文档版本：3.2 Ultimate / Flight Recorder + Offline Integrity Gate
+> 文档版本：3.3 Ultimate / Flight Recorder Causal Trace Audit
 > 创作：OpenAI GPT-5.6（Codex）  
 > 创作日期：2026-07-20  
 > 适用项目：74000M / 当前 1690X 样机 VEX V5 PROS C++17 工程  
@@ -180,7 +180,7 @@ PC 新建测试会话并填写队号、操作员和工况
 
 当前工程已经具备：
 
-- `LogFrame` schema 3.0；
+- `LogFrame` schema 3.1；
 - 固定容量 `SpscRing`；
 - `TelemetrySink/TelemetryDrain`；
 - `LogIntegrityTracker`；
@@ -194,24 +194,24 @@ PC 新建测试会话并填写队号、操作员和工况
 当前 ARM 工具链实际核验：
 
 ```text
-sizeof(robot::LogFrame) = 1456 B
-1456 B × 100 Hz = 145,600 B/s
-每分钟 ≈ 8.736 MB
-每小时 ≈ 524.16 MB
+sizeof(robot::LogFrame) = 1536 B
+1536 B × 100 Hz = 153,600 B/s
+每分钟 ≈ 9.216 MB
+每小时 ≈ 552.96 MB
 ```
 
 理论容量估算，不含文件头、块 CRC、FAT 开销和安全余量：
 
-| 卡容量 | 100 Hz 1456 B 连续记录理论时长 |
+| 卡容量 | 100 Hz 1536 B 连续记录理论时长 |
 |---:|---:|
-| 16 GB | 约 30 小时 |
-| 32 GB | 约 61 小时 |
+| 16 GB | 约 29 小时 |
+| 32 GB | 约 58 小时 |
 
 当前缺口：
 
 - 产品级 SPSC、TelemetryTask、控制拍 LogFrame builder、TF 块文件和平台无关校验器已离线实现并通过 PC/ARM 构建，尚待真卡 HIL；
 - 已有 PC 只读完整性检查 CLI；尚没有会话身份向导、复制归档、SQLite/Parquet、自动分析、GUI 和 LLM 报告程序；
-- `LogFrame` 尚未记录完整 PID P/I/D/FF 分项和参考轨迹；
+- 当前控制栈没有运行中的 PID P/I/D/FF、参考轨迹、机构、气动或自动程序实例；schema 3.1 用 availability 位明确记录这些层未接入，不能将零值解释为真实采样；
 - 当前配置没有 IMU，`pose_good=false`，二维位姿不能宣称有效；
 - 当前样机配置身份为 `1690X`，PC 默认队号 `74000M` 不能覆盖机器人上报身份；
 -所有正式 capability 继续保持关闭，自动路线继续 `DoNothing`。
@@ -410,7 +410,7 @@ FileFooter（正常关闭时存在）
 - `DATA.TMP` 或文件缺 footer 时仍尝试恢复到最后一个 CRC 正确的完整块；
 - 恢复不等于试次有效，报告必须标记截断；
 - `frame_size_bytes` 必须与 ARM ABI 实际值匹配；
-- 通过 PC 与 ARM ABI `static_assert(sizeof(LogFrame) == 1456)` 锁定 schema 3.0 实际帧长；schema 变化时必须同步版本、PC 解码器和容量预算。
+- 通过 PC 与 ARM ABI `static_assert(sizeof(LogFrame) == 1536)` 锁定 schema 3.1 实际帧长；schema 变化时必须同步版本、PC 解码器和容量预算。
 
 ### 6.3 环形缓冲和批量写
 
@@ -481,7 +481,7 @@ FileFooter（正常关闭时存在）
 - microSD insert/remove/open/write/close；
 -人工中止、碰撞、碰线、滑移和备注时间点。
 
-当前 schema 3.0 已保存当前程序实际拥有的逐电机原始值、逐 API 成功位、设备状态、逐量时间戳、Controller、competition、请求、最终输出、输出写结果、时序、故障、录制状态和全局事件。它仍缺尚未接入当前控制栈的 PID 分项、参考轨迹和有效位姿；不存在的机构、电磁阀和自动程序信号通过 valid 位明确为未实现，不伪造采样值。后续增加字段必须提升 schema 并提供旧日志适配器。
+当前 schema 3.1 保存当前程序实际拥有的逐电机原始值、逐 API 成功位、设备状态、逐量时间戳、Controller、原始 competition 输入、映射后 throttle/turn、Quick Turn、请求候选、仲裁选择/拒绝、最终输出意图、stop mode、owner、输出写结果、传感器/请求/执行器年龄、超期累计、环高水位、录制状态和全局事件。追加的 `ControlTraceLog.availability_bits` 明确区分“真实零值”和“该层未接入”。当前没有 SensorValidator/位姿估计器、PID 分项、参考轨迹、机构、电磁阀或自动程序实例；对应 availability/valid 位保持 false，不伪造采样值。后续增加字段必须提升 schema 并提供旧日志适配器。
 
 ---
 
@@ -893,7 +893,7 @@ Evidence             12.40–13.85 s
 60 秒完整日志约：
 
 ```text
-1456 B × 100 Hz × 60 s = 8.736 MB 二进制
+1536 B × 100 Hz × 60 s = 9.216 MB 二进制
 ```
 
 展开为带列名的 Markdown/CSV 后会膨胀数倍，并超过多数 LLM 的有效上下文。逐行复制会降低分析质量，而不是提高完整性。
@@ -1376,6 +1376,7 @@ MVP 不需要：
 | 终极策划案 | Implemented |
 | 当前 LogFrame/SPSC/Integrity 骨架 | Implemented / PC-tested status 以仓库测试为准 |
 | 产品级 LogFrame 接线 | OFFLINE IMPLEMENTED / PC+ARM BUILD PASSED / HIL NOT TESTED |
+| schema 3.1 当前可用 raw→request→actuator→output 因果链 | OFFLINE IMPLEMENTED / PC TESTED / HIL NOT TESTED |
 | microSD sink | OFFLINE IMPLEMENTED / HIL NOT TESTED |
 | Left 单拍 Coast / Y 录制状态机 | PC TESTED / ARM BUILD PASSED / HIL NOT TESTED |
 | PC V5L2 流式完整性检查 CLI | IMPLEMENTED / PC TESTED |
@@ -1389,6 +1390,20 @@ MVP 不需要：
 | pose_good | false |
 | autonomous capabilities | false |
 | CompetitionApproved | NOT TESTED |
+
+### 20.1 本轮需求—证据审计
+
+| 明确需求 | 当前权威证据 | 结论 |
+|---|---|---|
+| Left 按下当拍立即 Coast | `GlobalControlEventDetector` 上升沿、`CommissioningControlCycle` 单拍 BrakePayload、`OutputService` 唯一写入链；PC 边界测试 | `PC TESTED`；真实按键到六电机停止延迟待 HIL |
+| 按住 Left 不重复、不锁存 | event sequence 只在新上升沿增加；下一控制拍合法摇杆请求恢复输出的测试 | `PC TESTED` |
+| 覆盖当前全部电机 | 当前配置只有左三、右三共六个底盘电机；`ProsDriveIO::stop` 对两侧数组逐端口执行 Coast | 源码审计通过；六端口真实响应待 HIL |
+| 机构、电磁阀、自动程序恢复 | 当前 RobotConfig 和 composition root 没有这些执行器或活动自动程序，相关 valid/availability 位为 false | `NOT APPLICABLE` 于当前样机；新增硬件时必须接入同一事件分发契约后重新验收 |
+| Y 3 秒开始、1 秒结束且只在松开沿触发 | RecordingControl 阈值、断连/epoch/回退取消和边界测试 | `PC TESTED` |
+| 缺卡/预检失败不进入 Recording并三短震 | begin 先检查 `usd_is_installed`；Opening→Recording 两阶段提交；失败 alert sequence 驱动 `. . .` | 状态机 `PC TESTED`；真实缺卡和震动待 HIL |
+| 每次录制独立目录且不覆盖 | `/usd/FLIGHT/<robot>/R<storage>_T<boot-ms>/`，目录冲突递增寻找，TMP→V5L 提交 | 实现/ARM 构建通过；FAT32 跨上电冲突待 HIL |
+| 记录当前全部可观测信息 | schema 3.1 逐电机 raw、Controller、competition、映射、请求、仲裁、执行器、输出状态、时序、事件和 availability 位；round-trip/CRC 测试 | `PC TESTED`；物理数值正确性待 HIL |
+| 数据确实保存于 TF 并可取卡分析 | PROS `/usd/` sink、批写/flush/footer/rename、V5L 检查 CLI | 编译和离线文件链通过；真实 TF 连续写、拔卡恢复和取卡复验仍是最终硬门 |
 
 本文不会改变任何机器人 capability，也不会解锁自动运动或比赛路线。
 

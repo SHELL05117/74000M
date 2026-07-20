@@ -15,7 +15,7 @@ namespace robot {
 
 constexpr std::uint32_t kLogMagic = 0x374D3030u;  // "7M00"
 constexpr std::uint16_t kLogSchemaMajor = 3;
-constexpr std::uint16_t kLogSchemaMinor = 0;
+constexpr std::uint16_t kLogSchemaMinor = 1;
 
 struct LogHeader {
   std::uint32_t magic{kLogMagic};
@@ -185,6 +185,53 @@ struct SystemEventLog {
   bool automatic_program_valid{};
 };
 
+enum ControlTraceAvailability : std::uint32_t {
+  kTraceNoData = 0,
+  kTraceRawInputs = 1u << 0,
+  kTraceValidatedState = 1u << 1,
+  kTracePoseState = 1u << 2,
+  kTraceDriverMapping = 1u << 3,
+  kTraceRequestCandidate = 1u << 4,
+  kTraceArbitration = 1u << 5,
+  kTraceActuatorIntent = 1u << 6,
+  kTraceOutputStatus = 1u << 7,
+  kTraceFaultManager = 1u << 8,
+  kTracePidTerms = 1u << 9,
+  kTraceMechanisms = 1u << 10,
+  kTracePneumatics = 1u << 11,
+  kTraceAutonomousProgram = 1u << 12,
+  kTraceCompetitionInput = 1u << 13,
+};
+
+// Schema 3.1 append-only extension. Availability bits distinguish a real
+// zero from a subsystem that is not composed in the current firmware.
+struct ControlTraceLog {
+  double mapped_throttle{};
+  double mapped_turn{};
+  double output_derate{};
+  TimeUs request_age_us{};
+  TimeUs mode_transition_time_us{};
+  std::uint32_t availability_bits{};
+  std::uint32_t arbitration_reject_bits{};
+  std::uint32_t arbitration_rejected_count{};
+  std::uint32_t selected_request_sequence{};
+  std::uint32_t selected_owner_lease{};
+  std::uint32_t mode_fault_bits{};
+  std::uint32_t ring_high_watermark{};
+  std::uint8_t selected_source{};
+  std::uint8_t stop_mode{};
+  std::uint8_t output_action{};
+  std::uint8_t drive_state{};
+  bool quick_turn_active{};
+  bool request_candidate_present{};
+  bool request_selected{};
+  bool deadline_missed{};
+  bool competition_disabled{};
+  bool competition_autonomous{};
+  bool competition_api_ok{};
+  std::uint8_t reserved{};
+};
+
 struct LogFrame {
   LogHeader header{};
   std::array<MotorLogSample, kMotorsPerSide> left_motor{};
@@ -210,6 +257,7 @@ struct LogFrame {
   ActuatorLog actuator{};
   TimingLog timing{};
   FaultLog fault{};
+  ControlTraceLog trace{};
 };
 
 inline LogFrame makeEmptyLogFrame(const FrameHeader& header,
@@ -224,8 +272,10 @@ inline LogFrame makeEmptyLogFrame(const FrameHeader& header,
 }
 
 static_assert(std::is_trivially_copyable_v<LogFrame>);
-static_assert(sizeof(LogFrame) == 1456,
-              "LogFrame schema 3.0 ARM ABI changed; version the schema and "
+static_assert(sizeof(ControlTraceLog) == 80,
+              "ControlTraceLog schema 3.1 ABI changed");
+static_assert(sizeof(LogFrame) == 1536,
+              "LogFrame schema 3.1 ARM ABI changed; version the schema and "
               "update the PC decoder before accepting new logs");
 
 }  // namespace robot

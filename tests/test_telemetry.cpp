@@ -94,6 +94,19 @@ class MemoryRecordingSink final : public robot::RecordingSessionSink {
   std::size_t frame_count{};
 };
 
+class CapturingRecorder final : public robot::FlightRecorderPort {
+ public:
+  void capture(const robot::ModeSnapshot&,
+               const robot::ControllerSnapshot&,
+               robot::LogFrame& frame) noexcept override {
+    captured = frame;
+    ++capture_count;
+  }
+
+  robot::LogFrame captured{};
+  std::uint32_t capture_count{};
+};
+
 class MemoryByteWriter final : public robot::RecordingByteWriter {
  public:
   bool writeBytes(const void* data, std::size_t size) override {
@@ -215,6 +228,65 @@ ROBOT_TEST("control loop samples each IO once and publishes a boundary stop") {
   ROBOT_REQUIRE(actuators.frame.left_V == 0.0);
   ROBOT_REQUIRE(actuators.frame.right_V == 0.0);
   ROBOT_REQUIRE(modes.snapshot().enabled);
+}
+
+ROBOT_TEST("control log marks available and unavailable causal layers") {
+  robot::FakeClock clock;
+  clock.setNowUs(10000);
+  robot::FakeDriveIO drive(hardwareConfig(), {2.0, 12.0});
+  ROBOT_REQUIRE(drive.initialize());
+  robot::FakeControllerIO controller;
+  robot::ControllerSnapshot pad{};
+  pad.connected = true;
+  pad.api_ok = true;
+  controller.set(pad);
+  robot::FakeCompetitionIO competition;
+  robot::CompetitionSnapshot competition_state{};
+  competition_state.disabled = false;
+  competition_state.autonomous = false;
+  competition_state.field_connected = false;
+  competition_state.api_ok = true;
+  competition.set(competition_state);
+  MemoryModeStore mode_store;
+  robot::ModeManager modes(mode_store);
+  MemoryActuatorStore actuators;
+  robot::TimingMonitor timing({0.010, 0.001, 0.050, 0.015});
+  robot::SafeStopControlCycle cycle;
+  CapturingRecorder recorder;
+  robot::AtomicOutputStatusStore output_status;
+  output_status.publish(
+      {77, 0, robot::OutputAction::WroteVoltage, true, true});
+  robot::ControlLoop loop(
+      clock, drive, controller, competition, modes, actuators, timing,
+      cycle, {10}, &recorder, 42, &output_status);
+
+  loop.tickOnce();
+  ROBOT_REQUIRE(recorder.capture_count == 1);
+  const auto& log = recorder.captured;
+  ROBOT_REQUIRE(log.header.schema_major == 3);
+  ROBOT_REQUIRE(log.header.schema_minor == 1);
+  ROBOT_REQUIRE(log.header.frame_size_bytes == sizeof(robot::LogFrame));
+  ROBOT_REQUIRE(
+      (log.trace.availability_bits & robot::kTraceRawInputs) != 0);
+  ROBOT_REQUIRE(
+      (log.trace.availability_bits & robot::kTraceActuatorIntent) != 0);
+  ROBOT_REQUIRE(
+      (log.trace.availability_bits & robot::kTraceCompetitionInput) != 0);
+  ROBOT_REQUIRE(
+      (log.trace.availability_bits & robot::kTraceOutputStatus) != 0);
+  ROBOT_REQUIRE(
+      (log.trace.availability_bits & robot::kTraceValidatedState) == 0);
+  ROBOT_REQUIRE(
+      (log.trace.availability_bits & robot::kTracePidTerms) == 0);
+  ROBOT_REQUIRE(!log.trace.competition_disabled);
+  ROBOT_REQUIRE(!log.trace.competition_autonomous);
+  ROBOT_REQUIRE(log.trace.competition_api_ok);
+  ROBOT_REQUIRE(log.trace.output_action ==
+                static_cast<std::uint8_t>(
+                    robot::OutputAction::WroteVoltage));
+  ROBOT_REQUIRE(log.actuator.last_written_sequence == 77);
+  ROBOT_REQUIRE(log.actuator.write_attempted);
+  ROBOT_REQUIRE(log.actuator.write_ok);
 }
 
 ROBOT_TEST("raw replay preserves recorded timestamps and sequence") {
@@ -376,6 +448,7 @@ ROBOT_TEST("flight recorder keeps Start and Stop boundary frames") {
   ROBOT_REQUIRE(ring.tryPop(captured));
   ROBOT_REQUIRE(
       (captured.recording.event_bits & robot::kRecordingStartRequested) != 0);
+  ROBOT_REQUIRE(captured.trace.ring_high_watermark == 1);
   ROBOT_REQUIRE(control.markRecording());
 
   frame = robot::makeEmptyLogFrame({4000000, 3, 7}, 9);
@@ -389,6 +462,7 @@ ROBOT_TEST("flight recorder keeps Start and Stop boundary frames") {
   ROBOT_REQUIRE(ring.tryPop(captured));
   ROBOT_REQUIRE(
       (captured.recording.event_bits & robot::kRecordingStopRequested) != 0);
+  ROBOT_REQUIRE(captured.trace.ring_high_watermark == 2);
 }
 
 ROBOT_TEST("recording file CRC changes when a frame byte changes") {
@@ -488,7 +562,7 @@ ROBOT_TEST("control log preserves per-motor values timestamps and API status") {
   actuator.right_V = -7.0;
   robot::TimingSample timing{};
   const auto frame = robot::makeControlLogFrame(
-      raw.h, 42, mode, raw, controller, actuator, timing, 0, 0);
+      raw.h, 42, mode, raw, controller, actuator, timing, 0, 0, 10000);
   const auto& logged = frame.left_motor[0];
   ROBOT_REQUIRE(logged.smart_port == 11);
   ROBOT_REQUIRE(logged.position_rad == 1.0);
@@ -506,6 +580,11 @@ ROBOT_TEST("control log preserves per-motor values timestamps and API status") {
   ROBOT_REQUIRE(frame.actuator.final_motor_voltage_V[3] == -7.0);
   ROBOT_REQUIRE(frame.actuator.final_motor_voltage_V[5] == -7.0);
   ROBOT_REQUIRE(frame.actuator.final_motor_valid_mask == 0x3Fu);
+  ROBOT_REQUIRE(frame.timing.sensor_age_us == 999);
+  ROBOT_REQUIRE(
+      (frame.trace.availability_bits & robot::kTraceRawInputs) != 0);
+  ROBOT_REQUIRE(
+      (frame.trace.availability_bits & robot::kTraceActuatorIntent) != 0);
 }
 
 ROBOT_TEST("recording verifier recovers complete blocks from a truncated file") {
