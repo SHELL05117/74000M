@@ -2,6 +2,10 @@
 
 This file records implementation commits in simple English. Dedicated `chore(log)` commits are intentionally omitted to avoid recursive log entries.
 
+## 2026-07-21
+
+- 63245809280c3f20286663223d6ae3715afc742a — Added the complete PC flight-log import, integrity, analysis, GUI, comparison, replay, reporting, and Windows packaging system.
+
 ## 2026-07-20
 
 - 1aa41ea9cff09736a04b82e25236ac39868ed477 — Added schema 3.1 causal trace logging for all currently available recording signals.
