@@ -25,7 +25,7 @@
 | SysId | Fixed-vector solver test; runtime requires calibrated linear velocity and train/validation labels | PASS / gated |
 | Run comparison | Identity/config-aware summary and delta output, PNG summary | PASS |
 | Recorded replay | V5L↔Parquet equivalence and time-indexed causal-chain snapshot | PASS |
-| Human GUI | Eight required pages, worker-thread import/analysis, interactive Parquet plots, offscreen smoke test | PASS |
+| Human GUI | Eight Chinese Swiss-grid pages, numbered navigation/shortcuts, worker-thread import/analysis, interactive Parquet plots, offscreen smoke test | PASS |
 | LLM pack | Report, dictionary, timeline, metrics, events, evidence CSVs, SHA-256 manifest | PASS |
 | CLI | doctor/session/window/scan/check/import/analyze/compare/replay/report/gui | PASS |
 | Windows packaging | PyInstaller one-directory build; packaged EXE offscreen startup/clean exit | PASS |

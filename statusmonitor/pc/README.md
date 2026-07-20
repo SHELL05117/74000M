@@ -8,6 +8,14 @@ evidence pack.
 
 The application never writes robot parameters or commands a robot.
 
+## Desktop interface
+
+Version 0.2 uses a fully Chinese Swiss-grid interface derived from the selected
+J concept: warm white canvas, numbered navigation, one VEX-red action color,
+flat tables, and evidence-first typography. All eight workflows and their
+underlying behavior are unchanged. Use `Ctrl+1` through `Ctrl+8` to switch
+pages.
+
 ## Install and run
 
 ```powershell
