@@ -17,6 +17,14 @@
 #include "robot/telemetry/flight_recorder.hpp"
 #include "robot/telemetry/recording.hpp"
 
+#ifndef ROBOT_SOURCE_COMMIT
+#define ROBOT_SOURCE_COMMIT "UNKNOWN"
+#endif
+
+#ifndef ROBOT_BUILD_DIRTY
+#define ROBOT_BUILD_DIRTY 1
+#endif
+
 namespace {
 
 constexpr char kExpectedRobotId[] = "1690X";
@@ -26,7 +34,6 @@ constexpr std::uint32_t kControllerHmiPeriodMs = 100;
 constexpr std::uint32_t kTelemetryPeriodMs = 5;
 constexpr std::size_t kTelemetryRingCapacity = 128;
 constexpr std::size_t kTelemetryBatchSize = 8;
-constexpr std::uint32_t kRobotIdHash = 0x1690u;
 
 class ProsMutex {
  public:
@@ -48,16 +55,21 @@ class RobotRuntime {
                  config_.runtime.min_math_dt_s,
                  config_.runtime.max_math_dt_s, 0.015}),
         cycle_(robot::make1690XCommissioningCurvatureConfig()),
-        recorder_producer_(recording_control_, telemetry_ring_),
+        recording_metadata_(robot::makeRecordingMetadata(
+            config_, clock_.nowUs(), ROBOT_SOURCE_COMMIT,
+            ROBOT_BUILD_DIRTY != 0)),
+        recorder_producer_(recording_control_, telemetry_ring_,
+                           recording_metadata_.boot_id),
         control_loop_(clock_, drive_, controller_, competition_, modes_,
                       actuator_store_, timing_, cycle_, {10, true},
-                      &recorder_producer_, kRobotIdHash, &output_status_),
+                      &recorder_producer_,
+                      recording_metadata_.robot_id_hash, &output_status_),
         output_(drive_, {config_.runtime.output_ttl_us,
                          config_.electrical.max_command_voltage_V, 1e-9,
                          robot::kCommissioningStopMode}),
         output_task_(clock_, mode_store_, actuator_store_, output_, 5,
                      &output_status_),
-        recording_sink_(kExpectedRobotId, kRobotIdHash),
+        recording_sink_(recording_metadata_),
         recording_worker_(recording_control_, telemetry_ring_,
                           recording_sink_) {
     robot::HmiModel model{};
@@ -167,6 +179,7 @@ class RobotRuntime {
   robot::CommissioningControlCycle cycle_;
   robot::RecordingControl recording_control_{};
   robot::SpscRing<robot::LogFrame, kTelemetryRingCapacity> telemetry_ring_{};
+  robot::RecordingMetadata recording_metadata_{};
   robot::FlightRecorderProducer<kTelemetryRingCapacity>
       recorder_producer_;
   robot::AtomicOutputStatusStore output_status_{};

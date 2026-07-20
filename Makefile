@@ -14,7 +14,9 @@ INCDIR=$(ROOT)/include
 
 WARNFLAGS+=
 EXTRA_CFLAGS=
-EXTRA_CXXFLAGS=
+ROBOT_SOURCE_COMMIT:=$(shell git rev-parse HEAD 2>/dev/null || echo UNKNOWN)
+ROBOT_BUILD_DIRTY:=$(shell test -z "$$(git status --porcelain --untracked-files=normal 2>/dev/null)" && echo 0 || echo 1)
+EXTRA_CXXFLAGS=-DROBOT_SOURCE_COMMIT=\"$(ROBOT_SOURCE_COMMIT)\" -DROBOT_BUILD_DIRTY=$(ROBOT_BUILD_DIRTY)
 CXX_STANDARD:=gnu++17
 
 # Set to 1 to enable hot/cold linking

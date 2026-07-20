@@ -32,7 +32,6 @@ struct CommissioningCurvatureConfig {
   double quick_turn_exit_throttle{};
   double max_voltage_V{};
   TimeUs request_ttl_us{};
-  std::uint32_t coast_button{};
   OutputSlewConfig output_slew{};
 };
 
@@ -55,7 +54,6 @@ make1690XCommissioningCurvatureConfig() {
   config.quick_turn_exit_throttle = 0.25;
   config.max_voltage_V = 12.0;
   config.request_ttl_us = 30000;
-  config.coast_button = kButtonLeft;
   // Aggressive HIL candidate: throttle, turn, and final voltage can reach the
   // legal full-scale command in one nominal 10 ms frame while retaining a
   // finite Slew boundary and the hard 12 V command ceiling.
@@ -88,7 +86,7 @@ inline bool validCommissioningCurvatureConfig(
          config.quick_turn_exit_throttle <= 1.0 &&
          std::isfinite(config.max_voltage_V) &&
          config.max_voltage_V > 0.0 && config.max_voltage_V <= 12.0 &&
-         config.request_ttl_us > 0 && config.coast_button != 0 &&
+         config.request_ttl_us > 0 &&
          AsymmetricVoltageSlew(config.output_slew).valid();
 }
 
@@ -139,11 +137,8 @@ class CommissioningCurvatureMapper {
       return result;
     }
 
-    const bool coast_down =
-        (controller.buttons & config_.coast_button) != 0;
-    const bool coast_pressed = coast_down && !coast_button_down_;
-    coast_button_down_ = coast_down;
-    if (coast_pressed) {
+    if (one_shot_coast_pending_) {
+      one_shot_coast_pending_ = false;
       resetControlState();
       state_ = CommissioningDriveState::Coasting;
       result.request = makeCoastRequest(header, owner);
@@ -238,8 +233,13 @@ class CommissioningCurvatureMapper {
   void reset(std::uint32_t epoch = 0) noexcept {
     epoch_ = epoch;
     state_ = CommissioningDriveState::Coasting;
-    coast_button_down_ = false;
+    one_shot_coast_pending_ = false;
     resetControlState();
+  }
+
+  void requestOneShotCoast(std::uint32_t mode_epoch) noexcept {
+    if (mode_epoch != epoch_) reset(mode_epoch);
+    one_shot_coast_pending_ = true;
   }
 
   CommissioningDriveState state() const noexcept { return state_; }
@@ -272,7 +272,7 @@ class CommissioningCurvatureMapper {
   std::uint32_t epoch_{};
   CommissioningDriveState state_{CommissioningDriveState::Coasting};
   bool quick_turn_active_{};
-  bool coast_button_down_{};
+  bool one_shot_coast_pending_{};
 };
 
 class CommissioningDriveLeaseCommand final : public Command {
@@ -319,6 +319,18 @@ class CommissioningControlCycle final : public ControlCycle {
     capabilities_.controlled_test_voltage = true;
   }
 
+  void acceptGlobalEvent(
+      const GlobalControlEvent& event) noexcept override {
+    received_global_event_bits_ =
+        event.event_bits & kGlobalCoastOnce;
+    if ((event.event_bits & kGlobalCoastOnce) != 0)
+      mapper_.requestOneShotCoast(event.h.mode_epoch);
+  }
+
+  std::uint32_t consumedGlobalEventBits() const noexcept override {
+    return consumed_global_event_bits_;
+  }
+
   ActuatorFrame update(const FrameHeader& header, const ModeSnapshot& mode,
                        const RawDriveInputs&,
                        const ControllerSnapshot& controller,
@@ -343,6 +355,12 @@ class CommissioningControlCycle final : public ControlCycle {
         header, mode, controller, timing.math_dt_s,
         lease_command_.owner());
     last_mapped_ = mapped;
+    consumed_global_event_bits_ = kGlobalControlNoEvent;
+    if ((received_global_event_bits_ & kGlobalCoastOnce) != 0 &&
+        mapped.valid &&
+        std::get_if<BrakePayload>(&mapped.request.payload) != nullptr) {
+      consumed_global_event_bits_ = kGlobalCoastOnce;
+    }
     if (!controller_ready) {
       scheduler_.cancelAll(context, CommandEndReason::Cancelled);
     } else if (mapped.valid && lease_command_.active()) {
@@ -411,6 +429,8 @@ class CommissioningControlCycle final : public ControlCycle {
   RobotState state_{};
   CommissioningCurvatureResult last_mapped_{};
   ActuatorFrame last_actuator_{};
+  std::uint32_t received_global_event_bits_{};
+  std::uint32_t consumed_global_event_bits_{};
 };
 
 }  // namespace robot

@@ -4,12 +4,15 @@
 #include "robot/telemetry/flight_recorder.hpp"
 #include "robot/telemetry/replay.hpp"
 #include "robot/telemetry/recording.hpp"
+#include "robot/telemetry/recording_codec.hpp"
 #include "robot/telemetry/recording_file.hpp"
 #include "robot/telemetry/spsc_ring.hpp"
 #include "robot/telemetry/telemetry_task.hpp"
 #include "test_framework.hpp"
 
 #include <array>
+#include <cstring>
+#include <vector>
 
 namespace {
 
@@ -89,6 +92,19 @@ class MemoryRecordingSink final : public robot::RecordingSessionSink {
   std::uint32_t observed_start_ms{};
   std::uint32_t observed_drops{};
   std::size_t frame_count{};
+};
+
+class MemoryByteWriter final : public robot::RecordingByteWriter {
+ public:
+  bool writeBytes(const void* data, std::size_t size) override {
+    if (bytes.size() + size > fail_after) return false;
+    const auto* first = static_cast<const std::uint8_t*>(data);
+    bytes.insert(bytes.end(), first, first + size);
+    return true;
+  }
+
+  std::vector<std::uint8_t> bytes;
+  std::size_t fail_after{static_cast<std::size_t>(-1)};
 };
 
 robot::ControllerSnapshot recordingController(robot::TimeUs time_us,
@@ -285,6 +301,32 @@ ROBOT_TEST("recording worker closes only after queued frames are drained") {
   ROBOT_REQUIRE(control.state() == robot::RecordingState::Idle);
 }
 
+ROBOT_TEST("repeated recordings allocate increasing independent sessions") {
+  robot::RecordingControl control;
+  const robot::ModeSnapshot mode{
+      robot::CompetitionMode::Test, true, false, 7, 0, 0};
+  robot::SpscRing<robot::LogFrame, 8> ring;
+  MemoryRecordingSink sink;
+  robot::RecordingWorker<8, 2> worker(control, ring, sink);
+
+  control.observe(recordingController(100, 1, true), mode);
+  control.observe(recordingController(3000100, 2, false), mode);
+  worker.tickOnce();
+  ROBOT_REQUIRE(control.state() == robot::RecordingState::Recording);
+  control.observe(recordingController(4000000, 3, true), mode);
+  control.observe(recordingController(5000000, 4, false), mode);
+  worker.tickOnce();
+  ROBOT_REQUIRE(control.state() == robot::RecordingState::Idle);
+  ROBOT_REQUIRE(sink.observed_sequence == 1);
+
+  control.observe(recordingController(6000000, 5, true), mode);
+  control.observe(recordingController(9000000, 6, false), mode);
+  worker.tickOnce();
+  ROBOT_REQUIRE(control.state() == robot::RecordingState::Recording);
+  ROBOT_REQUIRE(sink.begin_count == 2);
+  ROBOT_REQUIRE(sink.observed_sequence == 2);
+}
+
 ROBOT_TEST("recording preflight failure refuses Recording and raises one alert") {
   robot::RecordingControl control;
   const robot::ModeSnapshot mode{
@@ -357,4 +399,180 @@ ROBOT_TEST("recording file CRC changes when a frame byte changes") {
   const auto second = robot::telemetryCrc32(
       reinterpret_cast<const std::uint8_t*>(&frame), sizeof(frame));
   ROBOT_REQUIRE(first != second);
+}
+
+ROBOT_TEST("recording codec round trips identity frames and footer") {
+  const robot::RobotConfig config = robot::make1690XCommissioningConfig();
+  const auto metadata =
+      robot::makeRecordingMetadata(config, 0x1122334455667788ull,
+                                   "0123456789abcdef", false);
+  MemoryByteWriter writer;
+  robot::RecordingFileEncoder encoder;
+  ROBOT_REQUIRE(encoder.begin(writer, metadata, 3, 17, 9000));
+  const std::uint32_t run_id =
+      robot::recordingRunId(metadata.boot_id, 3);
+  std::array<robot::LogFrame, 2> frames{{
+      robot::makeEmptyLogFrame({10000, 8, 7}, run_id),
+      robot::makeEmptyLogFrame({20000, 9, 7}, run_id),
+  }};
+  frames[0].controller.left_y = 0.25;
+  frames[1].left_motor[0].position_rad = 1.5;
+  ROBOT_REQUIRE(encoder.append(frames.data(), frames.size()));
+  ROBOT_REQUIRE(encoder.finish(4));
+
+  const auto report =
+      robot::verifyRecordingFile(writer.bytes.data(), writer.bytes.size());
+  ROBOT_REQUIRE(report.complete);
+  ROBOT_REQUIRE(report.fault_bits == robot::kRecordingVerifyOk);
+  ROBOT_REQUIRE(report.recoverable_frames == 2);
+  ROBOT_REQUIRE(report.valid_blocks == 1);
+  ROBOT_REQUIRE(report.producer_drops == 4);
+  ROBOT_REQUIRE(report.header.session_sequence == 3);
+  ROBOT_REQUIRE(report.header.storage_sequence == 17);
+  ROBOT_REQUIRE(report.header.run_id_hash == run_id);
+  ROBOT_REQUIRE(std::strcmp(report.header.robot_id, "1690X") == 0);
+
+  robot::LogFrame decoded{};
+  ROBOT_REQUIRE(robot::copyVerifiedRecordingFrame(
+      writer.bytes.data(), writer.bytes.size(), 1, decoded));
+  ROBOT_REQUIRE(std::memcmp(&decoded, &frames[1], sizeof(decoded)) == 0);
+}
+
+ROBOT_TEST("control log preserves per-motor values timestamps and API status") {
+  robot::RawDriveInputs raw{};
+  raw.h = {10000, 1, 7};
+  auto& motor = raw.left.motor[0];
+  motor.smart_port = 11;
+  motor.position_rad = {1.0, 9001, true, 101};
+  motor.velocity_radps = {2.0, 9002, false, 102};
+  motor.current_A = {3.0, 9003, true, 103};
+  motor.temperature_C = {4.0, 9004, true, 104};
+  motor.applied_voltage_V = {5.0, 9005, true, 105};
+  motor.faults = 0x22;
+  motor.faults_api_ok = true;
+  robot::ControllerSnapshot controller{};
+  controller.h = raw.h;
+  controller.connected = true;
+  controller.api_ok = true;
+  const robot::ModeSnapshot mode{
+      robot::CompetitionMode::Test, true, false, 7, 0, 0};
+  robot::ActuatorFrame actuator{};
+  actuator.left_V = 6.0;
+  actuator.right_V = -7.0;
+  robot::TimingSample timing{};
+  const auto frame = robot::makeControlLogFrame(
+      raw.h, 42, mode, raw, controller, actuator, timing, 0, 0);
+  const auto& logged = frame.left_motor[0];
+  ROBOT_REQUIRE(logged.smart_port == 11);
+  ROBOT_REQUIRE(logged.position_rad == 1.0);
+  ROBOT_REQUIRE(logged.velocity_radps == 2.0);
+  ROBOT_REQUIRE(logged.position_time_us == 9001);
+  ROBOT_REQUIRE(logged.velocity_time_us == 9002);
+  ROBOT_REQUIRE(logged.position_status == 101);
+  ROBOT_REQUIRE(logged.velocity_status == 102);
+  ROBOT_REQUIRE((logged.api_ok_mask & robot::kMotorPositionOk) != 0);
+  ROBOT_REQUIRE((logged.api_ok_mask & robot::kMotorVelocityOk) == 0);
+  ROBOT_REQUIRE(logged.quality == robot::Quality::Invalid);
+  ROBOT_REQUIRE(logged.api_faults == 0x22);
+  ROBOT_REQUIRE(frame.actuator.final_motor_voltage_V[0] == 6.0);
+  ROBOT_REQUIRE(frame.actuator.final_motor_voltage_V[2] == 6.0);
+  ROBOT_REQUIRE(frame.actuator.final_motor_voltage_V[3] == -7.0);
+  ROBOT_REQUIRE(frame.actuator.final_motor_voltage_V[5] == -7.0);
+  ROBOT_REQUIRE(frame.actuator.final_motor_valid_mask == 0x3Fu);
+}
+
+ROBOT_TEST("recording verifier recovers complete blocks from a truncated file") {
+  const auto metadata = robot::makeRecordingMetadata(
+      robot::make1690XCommissioningConfig(), 55, "UNKNOWN", true);
+  MemoryByteWriter writer;
+  robot::RecordingFileEncoder encoder;
+  ROBOT_REQUIRE(encoder.begin(writer, metadata, 1, 1, 100));
+  auto frame = robot::makeEmptyLogFrame(
+      {1000, 1, 7}, robot::recordingRunId(metadata.boot_id, 1));
+  ROBOT_REQUIRE(encoder.append(&frame, 1));
+  ROBOT_REQUIRE(encoder.finish(0));
+
+  const std::size_t without_footer =
+      writer.bytes.size() - sizeof(robot::RecordingFileFooter);
+  const auto truncated =
+      robot::verifyRecordingFile(writer.bytes.data(), without_footer);
+  ROBOT_REQUIRE(!truncated.complete);
+  ROBOT_REQUIRE(truncated.recoverable_frames == 1);
+  ROBOT_REQUIRE(truncated.valid_blocks == 1);
+
+  auto corrupted = writer.bytes;
+  const std::size_t payload =
+      sizeof(robot::RecordingFileHeader) +
+      sizeof(robot::RecordingBlockHeader);
+  corrupted[payload + 3] ^= 0x80;
+  const auto bad =
+      robot::verifyRecordingFile(corrupted.data(), corrupted.size());
+  ROBOT_REQUIRE((bad.fault_bits & robot::kRecordingBadPayload) != 0);
+  ROBOT_REQUIRE(bad.recoverable_frames == 0);
+}
+
+ROBOT_TEST("recording encoder reports bounded writer failure") {
+  const auto metadata = robot::makeRecordingMetadata(
+      robot::make1690XCommissioningConfig(), 77);
+  MemoryByteWriter writer;
+  writer.fail_after = sizeof(robot::RecordingFileHeader) +
+                      sizeof(robot::RecordingBlockHeader);
+  robot::RecordingFileEncoder encoder;
+  ROBOT_REQUIRE(encoder.begin(writer, metadata, 1, 1, 0));
+  auto frame = robot::makeEmptyLogFrame(
+      {1000, 1, 7}, robot::recordingRunId(metadata.boot_id, 1));
+  ROBOT_REQUIRE(!encoder.append(&frame, 1));
+}
+
+ROBOT_TEST("recording verifier rejects endian schema and footer corruption") {
+  const auto metadata = robot::makeRecordingMetadata(
+      robot::make1690XCommissioningConfig(), 88);
+  MemoryByteWriter writer;
+  robot::RecordingFileEncoder encoder;
+  ROBOT_REQUIRE(encoder.begin(writer, metadata, 2, 2, 0));
+  const auto run_id = robot::recordingRunId(metadata.boot_id, 2);
+  std::array<robot::LogFrame, 2> frames{{
+      robot::makeEmptyLogFrame({1000, 1, 7}, run_id),
+      robot::makeEmptyLogFrame({2000, 3, 7}, run_id),
+  }};
+  ROBOT_REQUIRE(encoder.append(frames.data(), frames.size()));
+  ROBOT_REQUIRE(encoder.finish(0));
+  const auto gap =
+      robot::verifyRecordingFile(writer.bytes.data(), writer.bytes.size());
+  ROBOT_REQUIRE((gap.fault_bits & robot::kRecordingSequenceGap) != 0);
+
+  auto wrong_endian = writer.bytes;
+  robot::RecordingFileHeader header{};
+  std::memcpy(&header, wrong_endian.data(), sizeof(header));
+  header.endian_marker = 0x04030201u;
+  header.header_crc32 = robot::telemetryCrc32(
+      reinterpret_cast<const std::uint8_t*>(&header),
+      offsetof(robot::RecordingFileHeader, header_crc32));
+  std::memcpy(wrong_endian.data(), &header, sizeof(header));
+  const auto endian = robot::verifyRecordingFile(
+      wrong_endian.data(), wrong_endian.size());
+  ROBOT_REQUIRE(
+      (endian.fault_bits & robot::kRecordingUnsupportedFormat) != 0);
+
+  auto wrong_schema = writer.bytes;
+  std::memcpy(&header, wrong_schema.data(), sizeof(header));
+  ++header.log_schema_major;
+  header.header_crc32 = robot::telemetryCrc32(
+      reinterpret_cast<const std::uint8_t*>(&header),
+      offsetof(robot::RecordingFileHeader, header_crc32));
+  std::memcpy(wrong_schema.data(), &header, sizeof(header));
+  const auto schema = robot::verifyRecordingFile(
+      wrong_schema.data(), wrong_schema.size());
+  ROBOT_REQUIRE(
+      (schema.fault_bits & robot::kRecordingUnsupportedFormat) != 0);
+
+  auto bad_footer = writer.bytes;
+  const std::size_t footer_crc_byte =
+      bad_footer.size() - sizeof(robot::RecordingFileFooter) +
+      offsetof(robot::RecordingFileFooter, footer_crc32);
+  bad_footer[footer_crc_byte] ^= 1;
+  const auto footer = robot::verifyRecordingFile(
+      bad_footer.data(), bad_footer.size());
+  ROBOT_REQUIRE(
+      (footer.fault_bits & robot::kRecordingBadFooter) != 0);
 }

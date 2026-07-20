@@ -14,7 +14,7 @@
 namespace robot {
 
 constexpr std::uint32_t kLogMagic = 0x374D3030u;  // "7M00"
-constexpr std::uint16_t kLogSchemaMajor = 2;
+constexpr std::uint16_t kLogSchemaMajor = 3;
 constexpr std::uint16_t kLogSchemaMinor = 0;
 
 struct LogHeader {
@@ -30,7 +30,7 @@ struct LogHeader {
 
 struct MotorLogSample {
   std::uint8_t smart_port{};
-  bool valid{};
+  std::uint8_t api_ok_mask{};
   Quality quality{Quality::Invalid};
   std::uint8_t reserved{};
   double position_rad{};
@@ -38,8 +38,27 @@ struct MotorLogSample {
   double current_A{};
   double temperature_C{};
   double applied_voltage_V{};
+  TimeUs position_time_us{};
+  TimeUs velocity_time_us{};
+  TimeUs current_time_us{};
+  TimeUs temperature_time_us{};
+  TimeUs applied_voltage_time_us{};
+  std::uint32_t position_status{};
+  std::uint32_t velocity_status{};
+  std::uint32_t current_status{};
+  std::uint32_t temperature_status{};
+  std::uint32_t applied_voltage_status{};
   std::uint32_t api_faults{};
   std::uint32_t reject_bits{};
+};
+
+enum MotorApiOkBits : std::uint8_t {
+  kMotorPositionOk = 1u << 0,
+  kMotorVelocityOk = 1u << 1,
+  kMotorCurrentOk = 1u << 2,
+  kMotorTemperatureOk = 1u << 3,
+  kMotorAppliedVoltageOk = 1u << 4,
+  kMotorFaultsOk = 1u << 5,
 };
 
 struct TimingLog {
@@ -81,6 +100,9 @@ struct ActuatorLog {
   double final_right_V{};
   double derate_target{};
   double derate_applied{};
+  std::array<double, kMotorsPerSide * 2>
+      final_motor_voltage_V{};
+  std::uint32_t final_motor_valid_mask{};
   std::uint32_t applied_limits{};
   std::uint32_t write_reject_bits{};
   std::uint32_t last_written_sequence{};
@@ -151,6 +173,18 @@ struct RecordingLog {
   std::uint16_t reserved{};
 };
 
+struct SystemEventLog {
+  std::uint32_t event_sequence{};
+  std::uint32_t event_bits{};
+  std::uint32_t mechanism_motor_request_mask{};
+  std::uint32_t pneumatic_request_mask{};
+  std::uint32_t automatic_program_id{};
+  bool drive_consumed{};
+  bool mechanisms_valid{};
+  bool pneumatics_valid{};
+  bool automatic_program_valid{};
+};
+
 struct LogFrame {
   LogHeader header{};
   std::array<MotorLogSample, kMotorsPerSide> left_motor{};
@@ -170,6 +204,7 @@ struct LogFrame {
   Quality heading_quality{Quality::Invalid};
   std::uint16_t reserved{};
   ControllerLog controller{};
+  SystemEventLog system_event{};
   RecordingLog recording{};
   RequestLog request{};
   ActuatorLog actuator{};
@@ -189,8 +224,8 @@ inline LogFrame makeEmptyLogFrame(const FrameHeader& header,
 }
 
 static_assert(std::is_trivially_copyable_v<LogFrame>);
-static_assert(sizeof(LogFrame) == 992,
-              "LogFrame schema 2.0 ARM ABI changed; version the schema and "
+static_assert(sizeof(LogFrame) == 1456,
+              "LogFrame schema 3.0 ARM ABI changed; version the schema and "
               "update the PC decoder before accepting new logs");
 
 }  // namespace robot

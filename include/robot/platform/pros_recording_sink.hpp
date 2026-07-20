@@ -5,14 +5,15 @@
 #include <cstdio>
 
 #include "robot/telemetry/recording.hpp"
-#include "robot/telemetry/recording_file.hpp"
+#include "robot/telemetry/recording_codec.hpp"
 
 namespace robot {
 
-class ProsRecordingSessionSink final : public RecordingSessionSink {
+class ProsRecordingSessionSink final : public RecordingSessionSink,
+                                       private RecordingByteWriter {
  public:
-  ProsRecordingSessionSink(const char* robot_id,
-                           std::uint32_t robot_id_hash) noexcept;
+  explicit ProsRecordingSessionSink(
+      RecordingMetadata metadata) noexcept;
 
   bool begin(std::uint32_t session_sequence,
              std::uint32_t start_time_ms) override;
@@ -23,23 +24,17 @@ class ProsRecordingSessionSink final : public RecordingSessionSink {
 
  private:
   bool ensureDirectory(const char* path);
-  bool writeExact(const void* data, std::size_t bytes,
-                  RecordingError error);
+  bool writeBytes(const void* data, std::size_t bytes) override;
   void setError(RecordingError error) noexcept;
 
-  char robot_id_[16]{};
+  RecordingMetadata metadata_{};
   char directory_[128]{};
   char temporary_path_[160]{};
   char committed_path_[160]{};
-  std::uint32_t robot_id_hash_{};
-  std::uint32_t block_sequence_{};
-  std::uint32_t total_frames_{};
-  std::uint32_t first_frame_sequence_{};
-  std::uint32_t last_frame_sequence_{};
-  TimeUs first_time_us_{};
-  TimeUs last_time_us_{};
+  RecordingFileEncoder encoder_{};
   RecordingError error_{RecordingError::None};
   std::FILE* file_{};
+  std::uint32_t blocks_since_flush_{};
 };
 
 }  // namespace robot

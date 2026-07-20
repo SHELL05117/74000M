@@ -96,8 +96,11 @@ commissioning_test:
   quick_turn_enter_throttle: 0.15
   quick_turn_exit_throttle: 0.25
   arming: "none; drive is active immediately in non-field opcontrol"
-  coast_button: "B; hold for immediate Coast, release to resume stick control"
-  zero_behavior: "Coast for neutral, B, disabled, disconnect, request stale, and output stale"
+  coast_button: "Controller Left rising edge; emit one global Coast event for one control frame; holding does not retrigger"
+  zero_behavior: "Coast for neutral, the one-frame Left event, disabled, disconnect, request stale, and output stale"
+  recording_button: "Y; release after >=3.0 s requests Start, release after >=1.0 s while Recording requests Stop"
+  recording_storage: "V5 Brain microSD/TF at /usd/FLIGHT/<robot>/R<storage-sequence>_T<boot-ms>/DATA.V5L"
+  recording_failure_alert: "Refuse/abort recording and issue three short Controller rumble pulses"
   throttle_rise_per_s: 100.0
   throttle_fall_per_s: 100.0
   turn_rise_per_s: 100.0

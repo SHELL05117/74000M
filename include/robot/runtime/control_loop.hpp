@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "robot/platform/io.hpp"
+#include "robot/runtime/global_control_event.hpp"
 #include "robot/runtime/mailbox.hpp"
 #include "robot/runtime/mode_manager.hpp"
 #include "robot/runtime/output_status.hpp"
@@ -13,6 +14,11 @@ namespace robot {
 
 class ControlCycle {
  public:
+  virtual void acceptGlobalEvent(
+      const GlobalControlEvent&) noexcept {}
+  virtual std::uint32_t consumedGlobalEventBits() const noexcept {
+    return kGlobalControlNoEvent;
+  }
   virtual ActuatorFrame update(const FrameHeader& header,
                                const ModeSnapshot& mode,
                                const RawDriveInputs& raw,
@@ -89,6 +95,9 @@ class ControlLoop {
 
     const RawDriveInputs raw = drive_.readAll(header);
     const ControllerSnapshot controller = controller_.readOnce(header);
+    const GlobalControlEvent global_event =
+        global_event_detector_.observe(header, controller);
+    cycle_.acceptGlobalEvent(global_event);
     ActuatorFrame frame =
         cycle_.update(header, mode, raw, controller, sample);
     frame.h = header;
@@ -109,6 +118,11 @@ class ControlLoop {
         log.actuator.write_reject_bits = status.reject_bits;
       }
       cycle_.populateLogFrame(log);
+      log.system_event.event_sequence = global_event.event_sequence;
+      log.system_event.event_bits = global_event.event_bits;
+      log.system_event.drive_consumed =
+          (cycle_.consumedGlobalEventBits() &
+           kGlobalCoastOnce) != 0;
       recorder_->capture(mode, controller, log);
     }
     return sample;
@@ -135,6 +149,7 @@ class ControlLoop {
   FlightRecorderPort* recorder_{};
   std::uint32_t run_id_hash_{};
   const OutputStatusStore* output_status_{};
+  GlobalControlEventDetector global_event_detector_{};
   std::uint32_t sequence_{};
 };
 

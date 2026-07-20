@@ -192,9 +192,9 @@ ROBOT_TEST("Coast clears automatic Quick Turn hysteresis memory") {
   ROBOT_REQUIRE(result.quick_turn_active);
 
   const robot::FrameHeader coast{20000, 2, 7};
+  mapper.requestOneShotCoast(coast.mode_epoch);
   result = mapper.update(
-      coast, mode,
-      controllerFor(coast, config.coast_button, 0.10, 0.5), 0.01,
+      coast, mode, controllerFor(coast, 0, 0.10, 0.5), 0.01,
       owner);
   ROBOT_REQUIRE(result.valid);
   ROBOT_REQUIRE(result.state == robot::CommissioningDriveState::Coasting);
@@ -299,8 +299,10 @@ ROBOT_TEST("Left produces one Coast frame and held Left does not latch") {
   ROBOT_REQUIRE(frame.right_V > 0.0);
 
   const robot::FrameHeader coast{20000, 2, 7};
+  cycle.acceptGlobalEvent(
+      {coast, 1, robot::kGlobalCoastOnce});
   frame = cycle.update(coast, mode, raw,
-                       controllerFor(coast, config.coast_button, 1.0, 0.0),
+                       controllerFor(coast, robot::kButtonLeft, 1.0, 0.0),
                        timingFor(coast));
   ROBOT_REQUIRE_NEAR(frame.left_V, 0.0, 1e-12);
   ROBOT_REQUIRE_NEAR(frame.right_V, 0.0, 1e-12);
@@ -308,8 +310,9 @@ ROBOT_TEST("Left produces one Coast frame and held Left does not latch") {
   ROBOT_REQUIRE(cycle.state() == robot::CommissioningDriveState::Coasting);
 
   const robot::FrameHeader held{30000, 3, 7};
+  cycle.acceptGlobalEvent({held, 1, robot::kGlobalControlNoEvent});
   frame = cycle.update(held, mode, raw,
-                       controllerFor(held, config.coast_button, 1.0, 0.0),
+                       controllerFor(held, robot::kButtonLeft, 1.0, 0.0),
                        timingFor(held));
   ROBOT_REQUIRE(frame.left_V > 0.0);
   ROBOT_REQUIRE(frame.right_V > 0.0);
@@ -357,6 +360,44 @@ ROBOT_TEST("Left produces one Coast frame and held Left does not latch") {
   ROBOT_REQUIRE_NEAR(frame.left_V, 0.0, 1e-12);
   ROBOT_REQUIRE_NEAR(frame.right_V, 0.0, 1e-12);
   ROBOT_REQUIRE(frame.zero_behavior == robot::StopMode::Coast);
+}
+
+ROBOT_TEST("global Left detector emits once and requires release after invalid input") {
+  robot::GlobalControlEventDetector detector;
+  const robot::FrameHeader released{10000, 1, 7};
+  auto event = detector.observe(released, controllerFor(released));
+  ROBOT_REQUIRE(event.event_bits == robot::kGlobalControlNoEvent);
+
+  const robot::FrameHeader pressed{20000, 2, 7};
+  event = detector.observe(
+      pressed, controllerFor(pressed, robot::kButtonLeft));
+  ROBOT_REQUIRE(event.event_bits == robot::kGlobalCoastOnce);
+  ROBOT_REQUIRE(event.event_sequence == 1);
+
+  const robot::FrameHeader held{30000, 3, 7};
+  event = detector.observe(
+      held, controllerFor(held, robot::kButtonLeft));
+  ROBOT_REQUIRE(event.event_bits == robot::kGlobalControlNoEvent);
+
+  auto invalid = controllerFor({40000, 4, 7}, robot::kButtonLeft);
+  invalid.connected = false;
+  invalid.api_ok = false;
+  event = detector.observe(invalid.h, invalid);
+  ROBOT_REQUIRE(event.event_bits == robot::kGlobalControlNoEvent);
+
+  const robot::FrameHeader reconnect_held{50000, 5, 7};
+  event = detector.observe(
+      reconnect_held,
+      controllerFor(reconnect_held, robot::kButtonLeft));
+  ROBOT_REQUIRE(event.event_bits == robot::kGlobalControlNoEvent);
+  const robot::FrameHeader rearm{60000, 6, 7};
+  detector.observe(rearm, controllerFor(rearm));
+  const robot::FrameHeader press_again{70000, 7, 7};
+  event = detector.observe(
+      press_again,
+      controllerFor(press_again, robot::kButtonLeft));
+  ROBOT_REQUIRE(event.event_bits == robot::kGlobalCoastOnce);
+  ROBOT_REQUIRE(event.event_sequence == 2);
 }
 
 ROBOT_TEST("commissioning output watchdog uses Coast for stale frames") {

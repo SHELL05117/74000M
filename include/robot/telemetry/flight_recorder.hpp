@@ -8,6 +8,7 @@
 #include "robot/runtime/timing_monitor.hpp"
 #include "robot/state/raw_inputs.hpp"
 #include "robot/telemetry/recording.hpp"
+#include "robot/telemetry/recording_file.hpp"
 
 namespace robot {
 
@@ -22,17 +23,38 @@ class FlightRecorderPort {
 inline void copyMotorLog(const MotorSample& source,
                          MotorLogSample& destination) noexcept {
   destination.smart_port = source.smart_port;
-  destination.valid =
-      source.position_rad.api_ok && source.velocity_radps.api_ok &&
-      source.current_A.api_ok && source.temperature_C.api_ok &&
-      source.applied_voltage_V.api_ok && source.faults_api_ok;
+  destination.api_ok_mask =
+      (source.position_rad.api_ok ? kMotorPositionOk : 0u) |
+      (source.velocity_radps.api_ok ? kMotorVelocityOk : 0u) |
+      (source.current_A.api_ok ? kMotorCurrentOk : 0u) |
+      (source.temperature_C.api_ok ? kMotorTemperatureOk : 0u) |
+      (source.applied_voltage_V.api_ok ? kMotorAppliedVoltageOk : 0u) |
+      (source.faults_api_ok ? kMotorFaultsOk : 0u);
+  constexpr std::uint8_t kAllMotorApis =
+      kMotorPositionOk | kMotorVelocityOk | kMotorCurrentOk |
+      kMotorTemperatureOk | kMotorAppliedVoltageOk | kMotorFaultsOk;
+  const bool valid = destination.api_ok_mask == kAllMotorApis;
   destination.quality =
-      destination.valid ? Quality::Good : Quality::Invalid;
+      valid ? Quality::Good : Quality::Invalid;
   destination.position_rad = source.position_rad.value;
   destination.velocity_radps = source.velocity_radps.value;
   destination.current_A = source.current_A.value;
   destination.temperature_C = source.temperature_C.value;
   destination.applied_voltage_V = source.applied_voltage_V.value;
+  destination.position_time_us = source.position_rad.sample_time_us;
+  destination.velocity_time_us = source.velocity_radps.sample_time_us;
+  destination.current_time_us = source.current_A.sample_time_us;
+  destination.temperature_time_us =
+      source.temperature_C.sample_time_us;
+  destination.applied_voltage_time_us =
+      source.applied_voltage_V.sample_time_us;
+  destination.position_status = source.position_rad.device_status;
+  destination.velocity_status = source.velocity_radps.device_status;
+  destination.current_status = source.current_A.device_status;
+  destination.temperature_status =
+      source.temperature_C.device_status;
+  destination.applied_voltage_status =
+      source.applied_voltage_V.device_status;
   destination.api_faults = source.faults;
 }
 
@@ -91,6 +113,13 @@ inline LogFrame makeControlLogFrame(
   frame.controller.field_connected = mode.field_connected;
   frame.actuator.final_left_V = actuator.left_V;
   frame.actuator.final_right_V = actuator.right_V;
+  for (std::size_t index = 0; index < kMotorsPerSide; ++index) {
+    frame.actuator.final_motor_voltage_V[index] = actuator.left_V;
+    frame.actuator.final_motor_voltage_V[kMotorsPerSide + index] =
+        actuator.right_V;
+  }
+  frame.actuator.final_motor_valid_mask =
+      (1u << (kMotorsPerSide * 2)) - 1u;
   frame.actuator.applied_limits = actuator.applied_limits;
   frame.timing.raw_dt_s = timing.raw_dt_s;
   frame.timing.math_dt_s = timing.math_dt_s;
@@ -106,8 +135,9 @@ template <std::size_t RingCapacity>
 class FlightRecorderProducer final : public FlightRecorderPort {
  public:
   FlightRecorderProducer(RecordingControl& control,
-                         SpscRing<LogFrame, RingCapacity>& ring)
-      : control_(control), ring_(ring) {}
+                         SpscRing<LogFrame, RingCapacity>& ring,
+                         std::uint64_t boot_id = 0)
+      : control_(control), ring_(ring), boot_id_(boot_id) {}
 
   void capture(const ModeSnapshot& mode,
                const ControllerSnapshot& controller,
@@ -120,6 +150,9 @@ class FlightRecorderProducer final : public FlightRecorderPort {
     frame.recording.error = static_cast<std::uint8_t>(observed.error);
     frame.recording.session_sequence = observed.session_sequence;
     frame.recording.event_bits = observed.event_bits;
+    if (observed.session_sequence != 0)
+      frame.header.run_id_hash =
+          recordingRunId(boot_id_, observed.session_sequence);
     frame.timing.ring_depth = static_cast<std::uint32_t>(ring_.depth());
     frame.timing.log_dropped_total = ring_.dropped();
 
@@ -134,6 +167,7 @@ class FlightRecorderProducer final : public FlightRecorderPort {
  private:
   RecordingControl& control_;
   SpscRing<LogFrame, RingCapacity>& ring_;
+  std::uint64_t boot_id_{};
   RecordingState last_state_{RecordingState::Idle};
 };
 
