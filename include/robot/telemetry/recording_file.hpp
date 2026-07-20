@@ -81,16 +81,22 @@ struct RecordingFileFooter {
   std::uint32_t footer_crc32{};
 };
 
-inline std::uint32_t telemetryCrc32(const std::uint8_t* data,
-                                    std::size_t size) noexcept {
-  std::uint32_t crc = 0xFFFFFFFFu;
+inline std::uint32_t telemetryCrc32Update(
+    std::uint32_t state, const std::uint8_t* data,
+    std::size_t size) noexcept {
+  std::uint32_t crc = state;
   for (std::size_t index = 0; index < size; ++index) {
     crc ^= data[index];
     for (int bit = 0; bit < 8; ++bit)
       crc = (crc >> 1u) ^
             (0xEDB88320u & (0u - static_cast<std::uint32_t>(crc & 1u)));
   }
-  return ~crc;
+  return crc;
+}
+
+inline std::uint32_t telemetryCrc32(const std::uint8_t* data,
+                                    std::size_t size) noexcept {
+  return ~telemetryCrc32Update(0xFFFFFFFFu, data, size);
 }
 
 inline std::uint32_t telemetryFnv1a(const void* data, std::size_t size,

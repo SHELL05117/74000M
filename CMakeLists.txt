@@ -17,6 +17,14 @@ else()
     target_compile_options(robot_core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+add_executable(v5l_inspect tools/v5l_inspect.cpp)
+target_link_libraries(v5l_inspect PRIVATE robot_core)
+if(MSVC)
+    target_compile_options(v5l_inspect PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(v5l_inspect PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 include(CTest)
 if(BUILD_TESTING)
     add_executable(robot_tests
@@ -50,10 +58,33 @@ if(BUILD_TESTING)
     )
     target_link_libraries(robot_tests PRIVATE robot_core)
     target_include_directories(robot_tests PRIVATE tests)
+    add_executable(v5l_fixture tests/v5l_fixture.cpp)
+    target_link_libraries(v5l_fixture PRIVATE robot_core)
     if(MSVC)
         target_compile_options(robot_tests PRIVATE /W4 /permissive-)
+        target_compile_options(v5l_fixture PRIVATE /W4 /permissive-)
     else()
         target_compile_options(robot_tests PRIVATE -Wall -Wextra -Wpedantic)
+        target_compile_options(v5l_fixture PRIVATE -Wall -Wextra -Wpedantic)
     endif()
     add_test(NAME robot_tests COMMAND robot_tests)
+    set(V5L_FIXTURE_PATH "${CMAKE_CURRENT_BINARY_DIR}/v5l_fixture.v5l")
+    set(V5L_EMPTY_FIXTURE_PATH
+        "${CMAKE_CURRENT_BINARY_DIR}/v5l_empty_fixture.v5l")
+    add_test(NAME v5l_fixture_generate
+             COMMAND v5l_fixture "${V5L_FIXTURE_PATH}")
+    add_test(NAME v5l_empty_fixture_generate
+             COMMAND v5l_fixture --empty "${V5L_EMPTY_FIXTURE_PATH}")
+    add_test(NAME v5l_inspect_valid
+             COMMAND v5l_inspect --json "${V5L_FIXTURE_PATH}")
+    add_test(NAME v5l_inspect_rejects_empty
+             COMMAND ${CMAKE_COMMAND}
+                     "-DINSPECTOR=$<TARGET_FILE:v5l_inspect>"
+                     "-DRECORDING=${V5L_EMPTY_FIXTURE_PATH}"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/expect_v5l_reject.cmake")
+    set_tests_properties(v5l_inspect_valid PROPERTIES
+        DEPENDS v5l_fixture_generate
+        PASS_REGULAR_EXPRESSION "\"status\":\"PASS\"")
+    set_tests_properties(v5l_inspect_rejects_empty PROPERTIES
+        DEPENDS v5l_empty_fixture_generate)
 endif()

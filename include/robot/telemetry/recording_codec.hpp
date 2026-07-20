@@ -14,6 +14,14 @@ class RecordingByteWriter {
   virtual ~RecordingByteWriter() = default;
 };
 
+class RecordingByteReader {
+ public:
+  virtual std::size_t sizeBytes() const noexcept = 0;
+  virtual bool readBytes(std::size_t offset, void* destination,
+                         std::size_t size) noexcept = 0;
+  virtual ~RecordingByteReader() = default;
+};
+
 class RecordingFileEncoder {
  public:
   bool begin(RecordingByteWriter& writer,
@@ -112,6 +120,7 @@ enum RecordingVerifyFault : std::uint32_t {
   kRecordingBadFooter = 1u << 8,
   kRecordingFooterMismatch = 1u << 9,
   kRecordingTrailingData = 1u << 10,
+  kRecordingNoFrames = 1u << 11,
 };
 
 struct RecordingVerifyReport {
@@ -119,21 +128,28 @@ struct RecordingVerifyReport {
   std::uint32_t recoverable_frames{};
   std::uint32_t valid_blocks{};
   std::uint32_t producer_drops{};
+  std::uint32_t first_frame_sequence{};
+  std::uint32_t last_frame_sequence{};
+  TimeUs first_time_us{};
+  TimeUs last_time_us{};
   std::size_t valid_bytes{};
   bool complete{};
   RecordingFileHeader header{};
 };
 
-inline RecordingVerifyReport verifyRecordingFile(
-    const std::uint8_t* data, std::size_t size) noexcept {
+inline RecordingVerifyReport verifyRecording(
+    RecordingByteReader& reader) noexcept {
   RecordingVerifyReport report{};
-  if (data == nullptr || size < sizeof(RecordingFileHeader)) {
+  const std::size_t size = reader.sizeBytes();
+  if (size < sizeof(RecordingFileHeader) ||
+      !reader.readBytes(0, &report.header, sizeof(report.header))) {
     report.fault_bits = kRecordingTruncated;
     return report;
   }
-  std::memcpy(&report.header, data, sizeof(report.header));
   const bool header_crc_ok =
-      telemetryCrc32(data, offsetof(RecordingFileHeader, header_crc32)) ==
+      telemetryCrc32(
+          reinterpret_cast<const std::uint8_t*>(&report.header),
+          offsetof(RecordingFileHeader, header_crc32)) ==
       report.header.header_crc32;
   if (!header_crc_ok || report.header.magic != kRecordingFileMagic) {
     report.fault_bits |= kRecordingBadHeader;
@@ -163,16 +179,22 @@ inline RecordingVerifyReport verifyRecordingFile(
       break;
     }
     std::uint32_t magic{};
-    std::memcpy(&magic, data + offset, sizeof(magic));
+    if (!reader.readBytes(offset, &magic, sizeof(magic))) {
+      report.fault_bits |= kRecordingTruncated;
+      break;
+    }
     if (magic == kRecordingBlockMagic) {
       if (size - offset < sizeof(RecordingBlockHeader)) {
         report.fault_bits |= kRecordingTruncated;
         break;
       }
       RecordingBlockHeader block{};
-      std::memcpy(&block, data + offset, sizeof(block));
+      if (!reader.readBytes(offset, &block, sizeof(block))) {
+        report.fault_bits |= kRecordingTruncated;
+        break;
+      }
       if (telemetryCrc32(
-              data + offset,
+              reinterpret_cast<const std::uint8_t*>(&block),
               offsetof(RecordingBlockHeader, header_crc32)) !=
               block.header_crc32 ||
           block.block_sequence != expected_block ||
@@ -187,16 +209,19 @@ inline RecordingVerifyReport verifyRecordingFile(
         report.fault_bits |= kRecordingTruncated;
         break;
       }
-      if (telemetryCrc32(data + payload_offset, block.payload_bytes) !=
-          block.payload_crc32) {
-        report.fault_bits |= kRecordingBadPayload;
-        break;
-      }
+      std::uint32_t payload_crc_state = 0xFFFFFFFFu;
       for (std::uint32_t index = 0; index < block.frame_count; ++index) {
         LogFrame frame{};
-        std::memcpy(&frame,
-                    data + payload_offset + index * sizeof(LogFrame),
-                    sizeof(frame));
+        if (!reader.readBytes(
+                payload_offset + index * sizeof(LogFrame),
+                &frame, sizeof(frame))) {
+          report.fault_bits |= kRecordingTruncated;
+          return report;
+        }
+        payload_crc_state = telemetryCrc32Update(
+            payload_crc_state,
+            reinterpret_cast<const std::uint8_t*>(&frame),
+            sizeof(frame));
         if (frame.header.magic != kLogMagic ||
             frame.header.frame_size_bytes != sizeof(LogFrame) ||
             frame.header.schema_major != kLogSchemaMajor ||
@@ -217,8 +242,16 @@ inline RecordingVerifyReport verifyRecordingFile(
         if (!have_frame) {
           first_sequence = frame.header.sequence;
           first_time = frame.header.time_us;
+          report.first_frame_sequence = first_sequence;
+          report.first_time_us = first_time;
         }
+        report.last_frame_sequence = frame.header.sequence;
+        report.last_time_us = frame.header.time_us;
         have_frame = true;
+      }
+      if (~payload_crc_state != block.payload_crc32) {
+        report.fault_bits |= kRecordingBadPayload;
+        break;
       }
       report.recoverable_frames += block.frame_count;
       ++report.valid_blocks;
@@ -233,9 +266,12 @@ inline RecordingVerifyReport verifyRecordingFile(
         break;
       }
       RecordingFileFooter footer{};
-      std::memcpy(&footer, data + offset, sizeof(footer));
+      if (!reader.readBytes(offset, &footer, sizeof(footer))) {
+        report.fault_bits |= kRecordingTruncated;
+        break;
+      }
       if (telemetryCrc32(
-              data + offset,
+              reinterpret_cast<const std::uint8_t*>(&footer),
               offsetof(RecordingFileFooter, footer_crc32)) !=
           footer.footer_crc32) {
         report.fault_bits |= kRecordingBadFooter;
@@ -250,6 +286,7 @@ inline RecordingVerifyReport verifyRecordingFile(
             footer.last_time_us != previous_time))) {
         report.fault_bits |= kRecordingFooterMismatch;
       }
+      if (!have_frame) report.fault_bits |= kRecordingNoFrames;
       report.producer_drops = footer.producer_drops;
       offset += sizeof(footer);
       report.valid_bytes = offset;
@@ -260,7 +297,8 @@ inline RecordingVerifyReport verifyRecordingFile(
                                 kRecordingBadBlockHeader |
                                 kRecordingBadPayload |
                                 kRecordingBadFooter |
-                                kRecordingFooterMismatch)) == 0;
+                                kRecordingFooterMismatch |
+                                kRecordingNoFrames)) == 0;
       if (offset != size) {
         report.fault_bits |= kRecordingTrailingData;
         report.complete = false;
@@ -272,6 +310,34 @@ inline RecordingVerifyReport verifyRecordingFile(
   }
   if (offset == size) report.fault_bits |= kRecordingTruncated;
   return report;
+}
+
+class MemoryRecordingByteReader final : public RecordingByteReader {
+ public:
+  MemoryRecordingByteReader(const std::uint8_t* data,
+                            std::size_t size) noexcept
+      : data_(data), size_(data == nullptr ? 0 : size) {}
+
+  std::size_t sizeBytes() const noexcept override { return size_; }
+
+  bool readBytes(std::size_t offset, void* destination,
+                 std::size_t size) noexcept override {
+    if (destination == nullptr || offset > size_ ||
+        size > size_ - offset)
+      return false;
+    std::memcpy(destination, data_ + offset, size);
+    return true;
+  }
+
+ private:
+  const std::uint8_t* data_{};
+  std::size_t size_{};
+};
+
+inline RecordingVerifyReport verifyRecordingFile(
+    const std::uint8_t* data, std::size_t size) noexcept {
+  MemoryRecordingByteReader reader(data, size);
+  return verifyRecording(reader);
 }
 
 inline bool copyVerifiedRecordingFrame(const std::uint8_t* data,

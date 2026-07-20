@@ -1,11 +1,11 @@
 # VEX V5 飞行记录、赛后自动诊断与调参证据系统终极策划案
 
-> 文档版本：3.1 Ultimate / Flight Recorder Implementation Freeze
+> 文档版本：3.2 Ultimate / Flight Recorder + Offline Integrity Gate
 > 创作：OpenAI GPT-5.6（Codex）  
 > 创作日期：2026-07-20  
 > 适用项目：74000M / 当前 1690X 样机 VEX V5 PROS C++17 工程  
 > 对应计划板块：板块 0、5；为板块 12、22 提供数据和报告基础  
-> 当前状态：机器人端 P0 离线实现；PC 分析端待实施
+> 当前状态：机器人端 P0 离线实现；PC 只读完整性检查 CLI 已实现；完整分析端待实施
 > 当前验证等级：文档、PC 单元测试和 PROS ARM 构建 `Implemented/Passed`；真实 TF 卡、HIL、USB 导出和现场效果仍为 `NOT TESTED`
 
 ---
@@ -187,6 +187,7 @@ PC 新建测试会话并填写队号、操作员和工况
 - `RawInputReplay`；
 - 全局一次性控制事件分发器（当前六个底盘电机消费 Left Coast，机构/气动/自动字段保留显式 valid 位）；
 - V5L2 身份化文件头、块/载荷/footer CRC、round-trip 解码与完整块截断恢复；
+- 不把整份日志载入内存的 `v5l_inspect` 流式完整性检查 CLI，可递归扫描 `.V5L/.TMP` 并输出人读文本或 JSON；
 - Fake IO、Fake Clock；
 - SysId 激励和拟合基础。
 
@@ -209,7 +210,7 @@ sizeof(robot::LogFrame) = 1456 B
 当前缺口：
 
 - 产品级 SPSC、TelemetryTask、控制拍 LogFrame builder、TF 块文件和平台无关校验器已离线实现并通过 PC/ARM 构建，尚待真卡 HIL；
-- 没有 PC 会话、导入、分析、GUI 和报告程序；
+- 已有 PC 只读完整性检查 CLI；尚没有会话身份向导、复制归档、SQLite/Parquet、自动分析、GUI 和 LLM 报告程序；
 - `LogFrame` 尚未记录完整 PID P/I/D/FF 分项和参考轨迹；
 - 当前配置没有 IMU，`pose_good=false`，二维位姿不能宣称有效；
 - 当前样机配置身份为 `1690X`，PC 默认队号 `74000M` 不能覆盖机器人上报身份；
@@ -568,7 +569,7 @@ statusmonitor/artifacts/<date>/<team>/<robot_id>/<session_id>/
 7. mode epoch 合法变化；
 8. boot/segment/robot/config/run 身份一致；
 9. 文件尾和 footer；
-10. producer drop、sink discard 与 sequence gap 的关系；
+10. 零帧空录制、producer drop、sink discard 与 sequence gap 的关系；
 11. 原始设备、request、actuator 是否陈旧；
 12. NaN/Inf、非法枚举、越界端口和质量状态。
 
@@ -594,6 +595,26 @@ statusmonitor/artifacts/<date>/<team>/<robot_id>/<session_id>/
 | NOT TESTED | 没有足够证据 |
 
 即使是 `REPEAT`，系统仍可生成诊断图，但不得生成参数批准结论。
+
+### 9.4 当前可执行的取卡验收
+
+本仓库已提供首个 PC 端只读硬门 `v5l_inspect`。它逐块、逐帧流式读取文件，不把长录制整体载入内存，也不修改 TF 卡内容。
+
+```powershell
+cmake --build build --config Release
+.\build\Release\v5l_inspect.exe E:\FLIGHT
+.\build\Release\v5l_inspect.exe --json E:\FLIGHT
+```
+
+输入可以是一个或多个 `.V5L/.TMP` 文件或目录；目录会递归扫描且扩展名不区分大小写。输出包括机器人/软件/commit/dirty build 身份、schema、帧长、会话与存储序号、boot/run/config hash、有效帧和块、生产者丢帧、首末序号、时长、有效字节及故障位。
+
+退出码：
+
+- `0`：所有文件 footer 完整、CRC/序号/时间/身份通过且 producer drop 为零，状态 `PASS`；
+- `1`：输入、目录扫描或文件读取错误；
+- `2`：至少一个文件为空、不完整、损坏、身份/时序不一致或有 producer drop，状态 `REPEAT`。
+
+`.TMP` 截断文件仍会报告最后一个完整块可恢复的帧数，但不会被判为 `PASS`。当前 CLI 是 WP1 的完整性骨架，不等于完整导入器；它尚不复制只读归档、不生成 Parquet、GUI 或 LLM 报告。
 
 ---
 
@@ -1033,6 +1054,8 @@ statusmonitor doctor
 
 ### WP1：PC 离线导入、完整性和会话骨架
 
+当前进度：流式 V5L2 完整性检查 CLI 已实现并纳入 CTest；其余交付待实施。
+
 交付：
 
 - Python 项目和 CLI；
@@ -1355,6 +1378,7 @@ MVP 不需要：
 | 产品级 LogFrame 接线 | OFFLINE IMPLEMENTED / PC+ARM BUILD PASSED / HIL NOT TESTED |
 | microSD sink | OFFLINE IMPLEMENTED / HIL NOT TESTED |
 | Left 单拍 Coast / Y 录制状态机 | PC TESTED / ARM BUILD PASSED / HIL NOT TESTED |
+| PC V5L2 流式完整性检查 CLI | IMPLEMENTED / PC TESTED |
 | PC 会话和导入 | NOT IMPLEMENTED |
 | GUI | NOT IMPLEMENTED |
 | LLM 报告 | NOT IMPLEMENTED |

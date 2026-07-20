@@ -401,6 +401,18 @@ ROBOT_TEST("recording file CRC changes when a frame byte changes") {
   ROBOT_REQUIRE(first != second);
 }
 
+ROBOT_TEST("recording CRC supports incremental file reads") {
+  const std::array<std::uint8_t, 9> bytes{
+      0x00, 0x01, 0x02, 0x7F, 0x80, 0xAA, 0xCC, 0xFE, 0xFF};
+  const auto expected =
+      robot::telemetryCrc32(bytes.data(), bytes.size());
+  std::uint32_t state = 0xFFFFFFFFu;
+  state = robot::telemetryCrc32Update(state, bytes.data(), 4);
+  state = robot::telemetryCrc32Update(
+      state, bytes.data() + 4, bytes.size() - 4);
+  ROBOT_REQUIRE(~state == expected);
+}
+
 ROBOT_TEST("recording codec round trips identity frames and footer") {
   const robot::RobotConfig config = robot::make1690XCommissioningConfig();
   const auto metadata =
@@ -436,6 +448,21 @@ ROBOT_TEST("recording codec round trips identity frames and footer") {
   ROBOT_REQUIRE(robot::copyVerifiedRecordingFrame(
       writer.bytes.data(), writer.bytes.size(), 1, decoded));
   ROBOT_REQUIRE(std::memcmp(&decoded, &frames[1], sizeof(decoded)) == 0);
+}
+
+ROBOT_TEST("recording verifier rejects an empty recording") {
+  const auto metadata = robot::makeRecordingMetadata(
+      robot::make1690XCommissioningConfig(), 56, "UNKNOWN", true);
+  MemoryByteWriter writer;
+  robot::RecordingFileEncoder encoder;
+  ROBOT_REQUIRE(encoder.begin(writer, metadata, 1, 1, 100));
+  ROBOT_REQUIRE(encoder.finish(0));
+
+  const auto report =
+      robot::verifyRecordingFile(writer.bytes.data(), writer.bytes.size());
+  ROBOT_REQUIRE(!report.complete);
+  ROBOT_REQUIRE(report.recoverable_frames == 0);
+  ROBOT_REQUIRE((report.fault_bits & robot::kRecordingNoFrames) != 0);
 }
 
 ROBOT_TEST("control log preserves per-motor values timestamps and API status") {
