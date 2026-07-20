@@ -4,6 +4,7 @@ This file records implementation commits in simple English. Dedicated `chore(log
 
 ## 2026-07-20
 
+- a6a9d4c5fb981f7a4eea9a1c5998a575431ecda1 — Added controller-triggered flight recording with one-shot Coast and recoverable TF card logs.
 - 3cc3be479eb41c1d2778e9ddd475757c8cf8c76c — Added the ultimate VEX V5 flight recorder and post-run diagnostics plan.
 - dc5ff01ce8a835cc8196c25da4093255b29a5c9c — Added the telemetry status monitor plan document.
 - ee3cf1ca398cc76f081c14677e4f1e2258c0e749 — Added the VEX V5 PC status monitoring, recording, analysis, and tuning system implementation plan.
