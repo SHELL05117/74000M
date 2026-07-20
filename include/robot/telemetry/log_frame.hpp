@@ -9,11 +9,12 @@
 #include "robot/core/fault.hpp"
 #include "robot/core/frame.hpp"
 #include "robot/core/quality.hpp"
+#include "robot/state/raw_inputs.hpp"
 
 namespace robot {
 
 constexpr std::uint32_t kLogMagic = 0x374D3030u;  // "7M00"
-constexpr std::uint16_t kLogSchemaMajor = 1;
+constexpr std::uint16_t kLogSchemaMajor = 2;
 constexpr std::uint16_t kLogSchemaMinor = 0;
 
 struct LogHeader {
@@ -81,6 +82,7 @@ struct ActuatorLog {
   double derate_target{};
   double derate_applied{};
   std::uint32_t applied_limits{};
+  std::uint32_t write_reject_bits{};
   std::uint32_t last_written_sequence{};
   bool write_attempted{};
   bool write_ok{};
@@ -98,10 +100,63 @@ struct FaultLog {
   std::uint8_t reserved{};
 };
 
+struct TrackingLogSample {
+  double position_rad{};
+  double velocity_radps{};
+  TimeUs position_time_us{};
+  TimeUs velocity_time_us{};
+  std::uint32_t position_status{};
+  std::uint32_t velocity_status{};
+  bool configured{};
+  bool position_api_ok{};
+  bool velocity_api_ok{};
+  std::uint8_t reserved{};
+};
+
+struct RawIoLog {
+  TimeUs acquisition_end_us{};
+  TimeUs imu_rotation_time_us{};
+  TimeUs imu_rate_time_us{};
+  TimeUs battery_time_us{};
+  std::uint32_t imu_rotation_status{};
+  std::uint32_t imu_rate_status{};
+  std::uint32_t battery_status{};
+  bool imu_rotation_api_ok{};
+  bool imu_rate_api_ok{};
+  bool imu_status_api_ok{};
+  bool imu_calibrating{};
+  bool battery_api_ok{};
+  std::uint8_t reserved[3]{};
+};
+
+struct ControllerLog {
+  double left_x{};
+  double left_y{};
+  double right_x{};
+  double right_y{};
+  std::uint32_t buttons{};
+  std::uint8_t mode{};
+  bool connected{};
+  bool api_ok{};
+  bool enabled{};
+  bool field_connected{};
+  std::uint8_t reserved[3]{};
+};
+
+struct RecordingLog {
+  std::uint32_t session_sequence{};
+  std::uint32_t event_bits{};
+  std::uint8_t state{};
+  std::uint8_t error{};
+  std::uint16_t reserved{};
+};
+
 struct LogFrame {
   LogHeader header{};
   std::array<MotorLogSample, kMotorsPerSide> left_motor{};
   std::array<MotorLogSample, kMotorsPerSide> right_motor{};
+  std::array<TrackingLogSample, kMaxTrackingWheels> tracking{};
+  RawIoLog raw_io{};
   double imu_rotation_rad{};
   double imu_rate_radps{};
   double battery_V{};
@@ -114,6 +169,8 @@ struct LogFrame {
   Quality translation_quality{Quality::Invalid};
   Quality heading_quality{Quality::Invalid};
   std::uint16_t reserved{};
+  ControllerLog controller{};
+  RecordingLog recording{};
   RequestLog request{};
   ActuatorLog actuator{};
   TimingLog timing{};
@@ -132,5 +189,8 @@ inline LogFrame makeEmptyLogFrame(const FrameHeader& header,
 }
 
 static_assert(std::is_trivially_copyable_v<LogFrame>);
+static_assert(sizeof(LogFrame) == 992,
+              "LogFrame schema 2.0 ARM ABI changed; version the schema and "
+              "update the PC decoder before accepting new logs");
 
 }  // namespace robot

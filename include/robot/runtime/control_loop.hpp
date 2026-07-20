@@ -5,7 +5,9 @@
 #include "robot/platform/io.hpp"
 #include "robot/runtime/mailbox.hpp"
 #include "robot/runtime/mode_manager.hpp"
+#include "robot/runtime/output_status.hpp"
 #include "robot/runtime/timing_monitor.hpp"
+#include "robot/telemetry/flight_recorder.hpp"
 
 namespace robot {
 
@@ -16,6 +18,7 @@ class ControlCycle {
                                const RawDriveInputs& raw,
                                const ControllerSnapshot& controller,
                                const TimingSample& timing) = 0;
+  virtual void populateLogFrame(LogFrame&) const noexcept {}
   virtual ~ControlCycle() = default;
 };
 
@@ -44,7 +47,10 @@ class ControlLoop {
   ControlLoop(Clock& clock, DriveIO& drive, ControllerIO& controller,
               CompetitionIO& competition, ModeManager& modes,
               ActuatorStore& actuator_store, TimingMonitor& timing,
-              ControlCycle& cycle, ControlLoopConfig config)
+              ControlCycle& cycle, ControlLoopConfig config,
+              FlightRecorderPort* recorder = nullptr,
+              std::uint32_t run_id_hash = 0,
+              const OutputStatusStore* output_status = nullptr)
       : clock_(clock),
         drive_(drive),
         controller_(controller),
@@ -53,7 +59,10 @@ class ControlLoop {
         actuator_store_(actuator_store),
         timing_(timing),
         cycle_(cycle),
-        config_(config) {}
+        config_(config),
+        recorder_(recorder),
+        run_id_hash_(run_id_hash),
+        output_status_(output_status) {}
 
   TimingSample tickOnce() {
     const TimeUs start_us = clock_.nowUs();
@@ -88,6 +97,20 @@ class ControlLoop {
     if (modes_.boundaryStopPending())
       modes_.acknowledgeBoundaryStop(header.mode_epoch);
     timing_.finish(sample, clock_.nowUs());
+    if (recorder_ != nullptr) {
+      LogFrame log = makeControlLogFrame(
+          header, run_id_hash_, mode, raw, controller, frame, sample, 0, 0);
+      OutputStatus status{};
+      if (output_status_ != nullptr &&
+          output_status_->readLatest(status)) {
+        log.actuator.last_written_sequence = status.actuator_sequence;
+        log.actuator.write_attempted = status.write_attempted;
+        log.actuator.write_ok = status.io_ok;
+        log.actuator.write_reject_bits = status.reject_bits;
+      }
+      cycle_.populateLogFrame(log);
+      recorder_->capture(mode, controller, log);
+    }
     return sample;
   }
 
@@ -109,6 +132,9 @@ class ControlLoop {
   TimingMonitor& timing_;
   ControlCycle& cycle_;
   ControlLoopConfig config_{};
+  FlightRecorderPort* recorder_{};
+  std::uint32_t run_id_hash_{};
+  const OutputStatusStore* output_status_{};
   std::uint32_t sequence_{};
 };
 

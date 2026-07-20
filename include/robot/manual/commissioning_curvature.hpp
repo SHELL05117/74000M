@@ -55,7 +55,7 @@ make1690XCommissioningCurvatureConfig() {
   config.quick_turn_exit_throttle = 0.25;
   config.max_voltage_V = 12.0;
   config.request_ttl_us = 30000;
-  config.coast_button = kButtonB;
+  config.coast_button = kButtonLeft;
   // Aggressive HIL candidate: throttle, turn, and final voltage can reach the
   // legal full-scale command in one nominal 10 ms frame while retaining a
   // finite Slew boundary and the hard 12 V command ceiling.
@@ -139,7 +139,11 @@ class CommissioningCurvatureMapper {
       return result;
     }
 
-    if ((controller.buttons & config_.coast_button) != 0) {
+    const bool coast_down =
+        (controller.buttons & config_.coast_button) != 0;
+    const bool coast_pressed = coast_down && !coast_button_down_;
+    coast_button_down_ = coast_down;
+    if (coast_pressed) {
       resetControlState();
       state_ = CommissioningDriveState::Coasting;
       result.request = makeCoastRequest(header, owner);
@@ -234,6 +238,7 @@ class CommissioningCurvatureMapper {
   void reset(std::uint32_t epoch = 0) noexcept {
     epoch_ = epoch;
     state_ = CommissioningDriveState::Coasting;
+    coast_button_down_ = false;
     resetControlState();
   }
 
@@ -267,6 +272,7 @@ class CommissioningCurvatureMapper {
   std::uint32_t epoch_{};
   CommissioningDriveState state_{CommissioningDriveState::Coasting};
   bool quick_turn_active_{};
+  bool coast_button_down_{};
 };
 
 class CommissioningDriveLeaseCommand final : public Command {
@@ -336,6 +342,7 @@ class CommissioningControlCycle final : public ControlCycle {
     const CommissioningCurvatureResult mapped = mapper_.update(
         header, mode, controller, timing.math_dt_s,
         lease_command_.owner());
+    last_mapped_ = mapped;
     if (!controller_ready) {
       scheduler_.cancelAll(context, CommandEndReason::Cancelled);
     } else if (mapped.valid && lease_command_.active()) {
@@ -354,10 +361,33 @@ class CommissioningControlCycle final : public ControlCycle {
     const SafetyGateInput gate_input{header, mode, header.time_us,
                                      timing.math_dt_s, 1.0,
                                      capabilities_};
-    return safety_gate_.apply(selected_request, gate_input);
+    last_actuator_ = safety_gate_.apply(selected_request, gate_input);
+    return last_actuator_;
   }
 
   CommissioningDriveState state() const noexcept { return mapper_.state(); }
+
+  void populateLogFrame(LogFrame& frame) const noexcept override {
+    if (!last_mapped_.valid) return;
+    const DriveRequest& request = last_mapped_.request;
+    frame.request.source = static_cast<std::uint8_t>(request.source);
+    frame.request.owner_id =
+        static_cast<std::uint16_t>(request.owner.command_id);
+    frame.request.owner_lease = request.owner.lease_generation;
+    frame.request.request_time_us = request.h.time_us;
+    frame.request.ttl_us = request.ttl_us;
+    if (const auto* voltage =
+            std::get_if<WheelVoltagePayload>(&request.payload)) {
+      frame.request.payload_kind = 1;
+      frame.request.requested_left_V = voltage->left_V;
+      frame.request.requested_right_V = voltage->right_V;
+    } else if (std::get_if<BrakePayload>(&request.payload) != nullptr) {
+      frame.request.payload_kind = 2;
+    }
+    frame.actuator.final_left_V = last_actuator_.left_V;
+    frame.actuator.final_right_V = last_actuator_.right_V;
+    frame.actuator.applied_limits = last_actuator_.applied_limits;
+  }
 
  private:
   static SafetyGateConfig makeSafetyConfig(
@@ -379,6 +409,8 @@ class CommissioningControlCycle final : public ControlCycle {
   SafetyGate safety_gate_;
   DriveCapabilities capabilities_{};
   RobotState state_{};
+  CommissioningCurvatureResult last_mapped_{};
+  ActuatorFrame last_actuator_{};
 };
 
 }  // namespace robot

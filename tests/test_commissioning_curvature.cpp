@@ -285,7 +285,7 @@ ROBOT_TEST("automatic Quick Turn reaches full voltage in one nominal frame") {
   ROBOT_REQUIRE_NEAR(frame.right_V, -12.0, 1e-9);
 }
 
-ROBOT_TEST("B and every commissioning stop path use nonlatched Coast") {
+ROBOT_TEST("Left produces one Coast frame and held Left does not latch") {
   const auto config = robot::make1690XCommissioningCurvatureConfig();
   robot::CommissioningControlCycle cycle(config);
   robot::RawDriveInputs raw{};
@@ -307,7 +307,15 @@ ROBOT_TEST("B and every commissioning stop path use nonlatched Coast") {
   ROBOT_REQUIRE(frame.zero_behavior == robot::StopMode::Coast);
   ROBOT_REQUIRE(cycle.state() == robot::CommissioningDriveState::Coasting);
 
-  const robot::FrameHeader resumed{30000, 3, 7};
+  const robot::FrameHeader held{30000, 3, 7};
+  frame = cycle.update(held, mode, raw,
+                       controllerFor(held, config.coast_button, 1.0, 0.0),
+                       timingFor(held));
+  ROBOT_REQUIRE(frame.left_V > 0.0);
+  ROBOT_REQUIRE(frame.right_V > 0.0);
+  ROBOT_REQUIRE(cycle.state() == robot::CommissioningDriveState::Driving);
+
+  const robot::FrameHeader resumed{40000, 4, 7};
   frame = cycle.update(resumed, mode, raw,
                        controllerFor(resumed, 0, 1.0, 0.0),
                        timingFor(resumed));
@@ -315,7 +323,7 @@ ROBOT_TEST("B and every commissioning stop path use nonlatched Coast") {
   ROBOT_REQUIRE(frame.right_V > 0.0);
   ROBOT_REQUIRE(cycle.state() == robot::CommissioningDriveState::Driving);
 
-  const robot::FrameHeader neutral{40000, 4, 7};
+  const robot::FrameHeader neutral{50000, 5, 7};
   frame = cycle.update(neutral, mode, raw, controllerFor(neutral),
                        timingFor(neutral));
   ROBOT_REQUIRE_NEAR(frame.left_V, 0.0, 1e-12);
@@ -324,14 +332,14 @@ ROBOT_TEST("B and every commissioning stop path use nonlatched Coast") {
 
   auto field_mode = mode;
   field_mode.field_connected = true;
-  const robot::FrameHeader field{50000, 5, 7};
+  const robot::FrameHeader field{60000, 6, 7};
   frame = cycle.update(field, field_mode, raw,
                        controllerFor(field, 0, 1.0, 0.0), timingFor(field));
   ROBOT_REQUIRE_NEAR(frame.left_V, 0.0, 1e-12);
   ROBOT_REQUIRE_NEAR(frame.right_V, 0.0, 1e-12);
   ROBOT_REQUIRE(frame.zero_behavior == robot::StopMode::Coast);
 
-  const robot::FrameHeader disconnected{60000, 6, 7};
+  const robot::FrameHeader disconnected{70000, 7, 7};
   auto disconnected_controller = controllerFor(disconnected, 0, 1.0, 0.0);
   disconnected_controller.connected = false;
   frame = cycle.update(disconnected, mode, raw, disconnected_controller,
@@ -342,7 +350,7 @@ ROBOT_TEST("B and every commissioning stop path use nonlatched Coast") {
 
   auto disabled_mode = mode;
   disabled_mode.enabled = false;
-  const robot::FrameHeader disabled{70000, 7, 7};
+  const robot::FrameHeader disabled{80000, 8, 7};
   frame = cycle.update(disabled, disabled_mode, raw,
                        controllerFor(disabled, 0, 1.0, 0.0),
                        timingFor(disabled));

@@ -8,11 +8,14 @@
 #include "robot/manual/commissioning_curvature.hpp"
 #include "robot/platform/hardware_self_test.hpp"
 #include "robot/platform/pros_adapters.hpp"
+#include "robot/platform/pros_recording_sink.hpp"
 #include "robot/runtime/control_loop.hpp"
 #include "robot/runtime/mailbox.hpp"
 #include "robot/runtime/mode_manager.hpp"
 #include "robot/runtime/output_task.hpp"
 #include "robot/runtime/timing_monitor.hpp"
+#include "robot/telemetry/flight_recorder.hpp"
+#include "robot/telemetry/recording.hpp"
 
 namespace {
 
@@ -20,6 +23,10 @@ constexpr char kExpectedRobotId[] = "1690X";
 constexpr std::uint32_t kExpectedConfigSchema = 2;
 constexpr std::uint32_t kStartupSelfCheckPollMs = 10;
 constexpr std::uint32_t kControllerHmiPeriodMs = 100;
+constexpr std::uint32_t kTelemetryPeriodMs = 5;
+constexpr std::size_t kTelemetryRingCapacity = 128;
+constexpr std::size_t kTelemetryBatchSize = 8;
+constexpr std::uint32_t kRobotIdHash = 0x1690u;
 
 class ProsMutex {
  public:
@@ -41,12 +48,18 @@ class RobotRuntime {
                  config_.runtime.min_math_dt_s,
                  config_.runtime.max_math_dt_s, 0.015}),
         cycle_(robot::make1690XCommissioningCurvatureConfig()),
+        recorder_producer_(recording_control_, telemetry_ring_),
         control_loop_(clock_, drive_, controller_, competition_, modes_,
-                      actuator_store_, timing_, cycle_, {10, true}),
+                      actuator_store_, timing_, cycle_, {10, true},
+                      &recorder_producer_, kRobotIdHash, &output_status_),
         output_(drive_, {config_.runtime.output_ttl_us,
                          config_.electrical.max_command_voltage_V, 1e-9,
                          robot::kCommissioningStopMode}),
-        output_task_(clock_, mode_store_, actuator_store_, output_, 5) {
+        output_task_(clock_, mode_store_, actuator_store_, output_, 5,
+                     &output_status_),
+        recording_sink_(kExpectedRobotId, kRobotIdHash),
+        recording_worker_(recording_control_, telemetry_ring_,
+                          recording_sink_) {
     robot::HmiModel model{};
     model.controller_page = robot::ControllerPage::PoseDebug;
     model.translation_quality = robot::Quality::Invalid;
@@ -96,8 +109,27 @@ class RobotRuntime {
     return self_check_fault_bits_;
   }
 
+  void setRecorderAvailable(bool available) noexcept {
+    recording_control_.setAvailable(available);
+  }
+
   [[noreturn]] void runControl() { control_loop_.run(); }
   [[noreturn]] void runOutput() { output_task_.run(); }
+
+  [[noreturn]] void runTelemetry() {
+    std::uint32_t handled_alert_sequence{};
+    std::uint32_t wake_ms = clock_.nowMs();
+    while (true) {
+      recording_worker_.tickOnce();
+      const std::uint32_t requested =
+          recording_control_.alertSequence();
+      if (requested != handled_alert_sequence) {
+        hmi_alert_sequence_.publish(hmi_alert_sequence_.read() + 1);
+        handled_alert_sequence = requested;
+      }
+      clock_.delayUntilMs(wake_ms, kTelemetryPeriodMs);
+    }
+  }
 
   [[noreturn]] void runControllerHmi() {
     std::uint32_t handled_alert_sequence{};
@@ -117,6 +149,7 @@ class RobotRuntime {
   }
 
   void forceDisabled() {
+    recording_control_.requestStop();
     modes_.transitionTo(robot::CompetitionMode::Disabled, clock_.nowUs());
   }
 
@@ -132,9 +165,17 @@ class RobotRuntime {
   robot::ModeManager modes_;
   robot::TimingMonitor timing_;
   robot::CommissioningControlCycle cycle_;
+  robot::RecordingControl recording_control_{};
+  robot::SpscRing<robot::LogFrame, kTelemetryRingCapacity> telemetry_ring_{};
+  robot::FlightRecorderProducer<kTelemetryRingCapacity>
+      recorder_producer_;
+  robot::AtomicOutputStatusStore output_status_{};
   robot::ControlLoop control_loop_;
   robot::OutputService output_;
   robot::OutputTask output_task_;
+  robot::ProsRecordingSessionSink recording_sink_;
+  robot::RecordingWorker<kTelemetryRingCapacity, kTelemetryBatchSize>
+      recording_worker_;
   robot::StartupSelfCheck self_check_{};
   robot::ControllerPoseRenderer controller_renderer_{};
   robot::SnapshotBox<robot::HmiModel, ProsMutex> hmi_model_{};
@@ -148,6 +189,7 @@ class RobotRuntime {
 RobotRuntime* runtime{};
 pros::task_t output_task{};
 pros::task_t controller_hmi_task{};
+pros::task_t telemetry_task{};
 
 void outputTaskEntry(void* parameter) {
   static_cast<RobotRuntime*>(parameter)->runOutput();
@@ -155,6 +197,10 @@ void outputTaskEntry(void* parameter) {
 
 void controllerHmiTaskEntry(void* parameter) {
   static_cast<RobotRuntime*>(parameter)->runControllerHmi();
+}
+
+void telemetryTaskEntry(void* parameter) {
+  static_cast<RobotRuntime*>(parameter)->runTelemetry();
 }
 
 }  // namespace
@@ -178,6 +224,10 @@ extern "C" void initialize() {
   controller_hmi_task = pros::c::task_create(
       controllerHmiTaskEntry, runtime, TASK_PRIORITY_DEFAULT - 1,
       TASK_STACK_DEPTH_DEFAULT, "controller_hmi");
+  telemetry_task = pros::c::task_create(
+      telemetryTaskEntry, runtime, TASK_PRIORITY_DEFAULT - 1,
+      TASK_STACK_DEPTH_DEFAULT, "flight_recorder");
+  runtime->setRecorderAvailable(telemetry_task != nullptr);
 
   pros::lcd::set_text(3, "SELF CHECK: RUNNING");
   const robot::StartupSelfCheckStatus self_check =
@@ -189,6 +239,8 @@ extern "C" void initialize() {
     pros::lcd::set_text(3, "OUTPUT TASK ERROR");
   } else if (controller_hmi_task == nullptr) {
     pros::lcd::set_text(3, "CONTROLLER HMI ERROR");
+  } else if (telemetry_task == nullptr) {
+    pros::lcd::set_text(3, "RECORDER TASK ERROR");
   } else if (!self_check.healthy) {
     pros::lcd::set_text(3, "READY: SENSOR WARNING");
   } else {
@@ -196,7 +248,7 @@ extern "C" void initialize() {
   }
   pros::lcd::set_text(4, "ALL STOPS = COAST");
   pros::lcd::set_text(5, "LEFT Y/X CURVATURE");
-  pros::lcd::set_text(6, "AUTO QUICK / B COAST");
+  pros::lcd::set_text(6, "LEFT COAST / HOLD Y REC");
 }
 
 extern "C" void disabled() {
@@ -219,6 +271,6 @@ extern "C" void opcontrol() {
     pros::lcd::set_text(7, "DRIVE: LOCKED");
     return;
   }
-  pros::lcd::set_text(7, "TEST: CURVE / B COAST");
+  pros::lcd::set_text(7, "TEST: LEFT COAST / Y REC");
   runtime->runControl();
 }

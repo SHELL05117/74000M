@@ -1,12 +1,12 @@
 # VEX V5 飞行记录、赛后自动诊断与调参证据系统终极策划案
 
-> 文档版本：2.0 Ultimate  
+> 文档版本：3.0 Ultimate / Flight Recorder Freeze
 > 创作：OpenAI GPT-5.6（Codex）  
 > 创作日期：2026-07-20  
 > 适用项目：74000M / 当前 1690X 样机 VEX V5 PROS C++17 工程  
 > 对应计划板块：板块 0、5；为板块 12、22 提供数据和报告基础  
-> 当前状态：Implementation Plan / 待实施  
-> 当前验证等级：文档 `Implemented`；软件、microSD、USB 导出、HIL 与现场效果均为 `NOT TESTED`
+> 当前状态：机器人端 P0 离线实现；PC 分析端待实施
+> 当前验证等级：文档、PC 单元测试和 PROS ARM 构建 `Implemented/Passed`；真实 TF 卡、HIL、USB 导出和现场效果仍为 `NOT TESTED`
 
 ---
 
@@ -20,10 +20,11 @@
 
 ```text
 PC 新建测试会话并填写队号、操作员和工况
-  → 点击“开始记录窗口”
-  → 机器人完成一段运动，完整数据写入 microSD（TF）
-  → 点击“结束记录窗口”
-  → 导入对应日志
+  → 将已验证的 microSD（TF）插入 Brain
+  → 操作手长按 Y 至少 3 秒并松开，机器人预检后开始录制
+  → 机器人完成一段运动，完整数据写入本次独立目录
+  → 操作手长按 Y 至少 1 秒并松开，机器人封口并结束录制
+  → 将 TF 卡插入电脑，系统按独立目录导入
   → 自动完整性检查
   → 自动分段、计算、绘图和诊断
   → 输出给人看的 GUI
@@ -54,6 +55,7 @@ PC 新建测试会话并填写队号、操作员和工况
 - 不依赖实时 Dashboard；
 - 不通过 Controller 链路传完整日志；
 - 不要求 PC 通过 Controller 命令 Brain 开始或停止；
+- 不在 Controller 上实现录制状态 UI；首版只保留录制失败时的三次短震告警；
 - 不从 PC 远程写 PID、驱动电机或改变 capability；
 - 不自动把分析候选写入比赛配置；
 - 不把插值后的平滑曲线伪装成完整原始数据；
@@ -80,7 +82,7 @@ PC 新建测试会话并填写队号、操作员和工况
 
 - 完整的会话向导、身份信息和状态机；
 - PC 人工身份与机器人真值身份分域；
-- 728 B 帧长和 100 Hz 码率预算；
+- ARM ABI 实测帧长和 100 Hz 码率预算方法；
 - 完整的数据字典、产物目录和只读归档规则；
 - GUI、运行对比、自动分析、报告和 LLM 输出设计；
 - 导数、FFT、滤波器和 SysId 的方法边界；
@@ -92,16 +94,16 @@ PC 新建测试会话并填写队号、操作员和工况
 |---|---|
 | Controller→PC 是透明双向自定义协议 | 删除；官方 PROS CLI 路径按 RX-only 处理 |
 | PC 通过 Controller 发送 RUN_BIND、PING、分频或 LOG_CHUNK 请求 | 删除 |
-| 20/50 Hz 实时状态是 P0/P1 主目标 | 删除；仅保留可选 1–2 Hz 时间信标和状态提示 |
+| 20/50 Hz 实时状态是 P0/P1 主目标 | 删除；完整日志只写 TF |
 | 完整日志在结束后从 Controller 返回 | 删除；使用 microSD 或运动结束后的 Brain 直连 USB |
-| PC 点击开始必须直接命令 Brain | 改为“定义分析窗口”；Brain 连续/自动分段记录 |
+| PC 点击开始必须直接命令 Brain | 删除；Brain 侧 Y 长按松开沿控制独立录制 |
 | 日志和 UI 以实时链路为中心 | 改为“原始文件优先，导入后分析” |
 | 固定宣称 microSD 最大 16 GB 或 32 GB | 官方资料冲突；首发使用共同安全交集 16 GB FAT32，32 GB 待 HIL |
 | Markdown 内逐行复制全部原始样本 | 删除；Markdown 保存完整证据索引，原始样本保存在二进制/Parquet |
 
 最终架构结论：
 
-> **Controller 只做可选的单向时间信标；microSD（TF）做完整记录；PC 做身份绑定、导入、分析、GUI 和 LLM 报告；Brain 直连 USB 只作为赛后可选自动导出通道。**
+> **Controller 负责 Left 单拍 Coast、Y 长按录制触发和失败三短震；microSD（TF）按独立目录做完整记录；PC 做身份绑定、导入、分析、GUI 和 LLM 报告；Brain 直连 USB 只作为赛后可选自动导出通道。**
 
 ---
 
@@ -170,7 +172,6 @@ PC 新建测试会话并填写队号、操作员和工况
 | CPU 主频 | 667 MHz | 处理器时钟，不是控制频率 |
 | 项目控制环 | 名义 100 Hz | 当前 `nominal_period_s = 0.010` |
 | 完整快日志 | 候选 100 Hz | 每控制拍一帧，以真实时间戳为准 |
-| Controller 时间信标 | 候选 1–2 Hz | PC/Brain 时间窗口粗对齐 |
 | PC GUI 重绘 | 10–20 FPS | 导入后交互，与采样率无关 |
 
 所有分析必须使用机器人单调时间戳。不能因为名义周期是 10 ms 就把每个样本强行放在严格等距的 10 ms 网格上。
@@ -179,7 +180,7 @@ PC 新建测试会话并填写队号、操作员和工况
 
 当前工程已经具备：
 
-- `LogFrame` schema 1.0；
+- `LogFrame` schema 2.0；
 - 固定容量 `SpscRing`；
 - `TelemetrySink/TelemetryDrain`；
 - `LogIntegrityTracker`；
@@ -190,24 +191,22 @@ PC 新建测试会话并填写队号、操作员和工况
 当前 ARM 工具链实际核验：
 
 ```text
-sizeof(robot::LogFrame) = 728 B
-728 B × 100 Hz = 72,800 B/s
-每分钟 ≈ 4.368 MB
-每小时 ≈ 262.08 MB
+sizeof(robot::LogFrame) = 992 B
+992 B × 100 Hz = 99,200 B/s
+每分钟 ≈ 5.952 MB
+每小时 ≈ 357.12 MB
 ```
 
 理论容量估算，不含文件头、块 CRC、FAT 开销和安全余量：
 
-| 卡容量 | 100 Hz 728 B 连续记录理论时长 |
+| 卡容量 | 100 Hz 992 B 连续记录理论时长 |
 |---:|---:|
-| 16 GB | 约 61 小时 |
-| 32 GB | 约 122 小时 |
+| 16 GB | 约 44 小时 |
+| 32 GB | 约 89 小时 |
 
 当前缺口：
 
-- `src/main.cpp` 尚未创建产品级日志环和 TelemetryTask；
-- ControlLoop 尚未组装并推送完整 `LogFrame`；
-- 没有 microSD sink、Memory/Fake 产品 sink 或文件格式；
+- 产品级 SPSC、TelemetryTask、控制拍 LogFrame builder 和 TF 块文件已离线实现并通过 PC/ARM 构建，尚待真卡 HIL；
 - 没有 PC 会话、导入、分析、GUI 和报告程序；
 - `LogFrame` 尚未记录完整 PID P/I/D/FF 分项和参考轨迹；
 - 当前配置没有 IMU，`pose_good=false`，二维位姿不能宣称有效；
@@ -226,21 +225,23 @@ ControlLoop（名义 10 ms）
   ├─ 同拍采集 raw
   ├─ 生成 validated/state/request/actuator/timing/fault
   ├─ 组装定长 LogFrame
-  └─ SpscRing.tryPush()                   ← 控制环唯一日志动作
+  ├─ Left 上升沿 → 当拍全局 Coast stop intent
+  ├─ Y 松开沿 → 3 s Start / 1 s Stop 录制请求
+  └─ 仅在 Opening/Recording/Closing 边界按契约 SpscRing.tryPush()
           │
           ▼
 TelemetryTask（低优先级后台）
-  ├─ 批量写 microSD/TF：完整 100 Hz 块文件
+  ├─ Start 时完成 microSD/TF 预检并建立独立会话目录
+  ├─ 批量写本次录制的完整 100 Hz 块文件
   ├─ 写文件 header/block/footer/CRC
-  └─ 可选 1–2 Hz TIME_BEACON → Controller→PC
+  └─ Stop 时排空已接纳帧、写 footer、flush 并关闭
 
 PC 端
 ==============================================================================
 
 Session Manager
   ├─ 队号、操作员、观察员、测试类型、工况
-  ├─ 点击开始/结束，保存 PC 时间窗口
-  └─ 保存 Controller 时间信标，建立粗略 Brain↔PC 时间映射
+  └─ 创建或选择身份记录；不承担机器人录制触发
 
 Importer
   ├─ 首选：microSD/TF 插入电脑
@@ -270,97 +271,95 @@ Decode + Parquet + Event Segmentation
 - ControlLoop 不做文件 I/O、串口 I/O、CSV、JSON、字符串格式化或动态分配；
 - `tryPush` 满环时丢新帧并计数，永不等待；
 - TelemetryTask 不修改估计器、请求、仲裁、安全状态或电机输出；
-- microSD 缺失、满盘、慢写或拔出不改变机器人控制；
+- microSD 缺失、满盘、慢写或拔出可以拒绝/终止录制，但不改变机器人控制；
 - PC、Controller、GUI 和报告程序全部属于观测域；
 - 原始日志失败可以使试次 `REPEAT`，不能让运行中的机器人失控。
+- Left 不直接写电机；它只生成当前控制拍的 stop intent，经 request→arbiter→SafetyGate→OutputService 到唯一电机写入者。
 
 ---
 
-## 5. “点击开始/结束”的可实现语义
+## 5. 最终冻结的人工触发与状态语义
 
-### 5.1 为什么不能把按钮直接定义成 Brain 命令
+### 5.1 Left：一次性全局 Coast
 
-当 PC 只通过 Controller 连接时，官方 PROS 链路没有已实现的自定义反向用户通道。因此：
-
-```text
-PC 点击 Start/Stop ≠ 已证明能发送到 Brain 的 Start/Stop 命令
-```
-
-终极版不掩盖这个事实，而是把按钮定义成：
-
-> **建立和关闭一个 PC 侧分析窗口，并在导入后绑定机器人日志中的对应时间段。**
-
-### 5.2 推荐的连续分段记录模式
-
-机器人端：
-
-1. 程序启动时生成 `boot_id`；
-2. TelemetryTask 检测到有效 microSD 后开启分段文件；
-3. 每个文件记录固定最大时长或最大体积；
-4. Disabled、Driver、Test、Autonomous 等模式边沿写事件，但不阻塞；
-5. 文件持续覆盖 PC 点击窗口前后，保证不会因边界估计误差丢掉瞬态；
-6. 采用保留策略，而不是静默覆盖旧文件。
-
-PC 端：
-
-1. 点击“开始记录窗口”时创建 `session_id`，保存 `pc_monotonic_ns`；
-2. 保存最近的 `TIME_BEACON{boot_id, robot_time_us, file_id, frame_sequence}`；
-3. 点击“结束记录窗口”时保存结束时间；
-4. 导入后根据同一 `boot_id/file_id` 建立时间映射；
-5. 初始裁剪保留建议候选 `前 2 s + 后 2 s`，最终值由 HIL 冻结；
-6. 自动用请求边沿、速度阈值、模式事件和 command lifecycle 精确分段；
-7. 报告同时保存“人工窗口”和“自动识别运动窗口”。
-
-这种方式满足 PC 点击体验，同时不需要 PC→Brain 下行。
-
-### 5.3 精确打点的可选方式
-
-若某项测试要求 Brain 时钟上的精确起止：
-
-- 使用 Controller 按键组合生成 `RECORD_MARK_START/STOP` 事件；
-- 或由自动命令、SysId runner、测试状态机直接写事件；
-- 或运动结束后使用 Brain 直连 USB 的双向模式。
-
-PC 按钮仍负责身份、会话和分析窗口，不直接获得运动控制权限。
-
-### 5.4 用户体验状态
-
-PC 页面只显示必要状态：
+方向左键采用上升沿语义：
 
 ```text
-Draft → Armed → WindowRecording → WindowClosed
-      → WaitingForImport → Importing → Checking
-      → Analyzing → Complete / RepeatRequired
+未按 → 按下 Left
+  → 仅当前控制拍产生一次全局 Coast stop intent
+  → 该拍由既有仲裁、安全门和唯一输出服务写出
+  → 不因继续按住 Left 而重复触发或保持 Coast
+  → 下一控制拍若出现任何新的合法电机、气动或自动程序请求，
+     按正常仲裁结果恢复相应机动状态
 ```
 
-这不是实时状态监控；录制期间只需要：
+Left 不是急停锁存、不是模式切换，也不能旁路 `OutputService`。当前样机只配置六个驱动电机，因此首版能够实际覆盖全部已配置电机；后续机构电机和电磁阀接入时必须消费同一个 stop-event epoch，并继续遵守各自唯一写入者规则。
 
-- 会话是否已建立；
-- 时间信标是否最近可用；
-- 用户点击窗口时长；
-- 导入提示；
-- 明确说明“完整数据仍以 microSD 文件为准”。
+### 5.2 Y：按住、松开后触发的录制状态机
+
+所有阈值使用 Brain 单调时钟，动作只在 Y 的松开沿判定：
+
+| 当前状态 | 操作 | 结果 |
+|---|---|---|
+| `Idle` | 按住 Y `< 3.0 s` 后松开 | 取消，不做任何事 |
+| `Idle` | 按住 Y `>= 3.0 s` 后松开 | 发出一次 `StartRequested` |
+| `Opening` | 任意 Y 操作 | 忽略，防止重入 |
+| `Recording` | 按住 Y `< 1.0 s` 后松开 | 取消，继续录制 |
+| `Recording` | 按住 Y `>= 1.0 s` 后松开 | 记录 Stop marker，并发出一次 `StopRequested` |
+| `Closing` | 任意 Y 操作 | 忽略，直到文件关闭 |
+Controller 断开、时间回退、mode epoch 改变或程序重启都会取消尚未松开的长按，不得把旧按压延续到新会话。
+
+### 5.3 Start 的两阶段提交与预检
+
+`StartRequested` 不等于已经录制。TelemetryTask 必须按顺序完成：
+
+1. 检测 TF 卡存在；
+2. 创建/确认产品根目录和机器人身份目录；
+3. 以不会覆盖旧数据的递增录制序号创建本次独立目录；
+4. 创建数据临时文件；
+5. 写入 header 并检查返回值；
+6. flush header，确认文件系统可写；
+7. 仅在以上步骤全部成功后把状态发布为 `Recording`。
+
+缺卡、目录/文件创建失败、只读、空间耗尽、header 写入或 flush 失败、内部 schema/frame-size 不匹配，均不得进入 `Recording`，并将错误码锁存后回到 `Idle(error-latched)`、触发 Controller `. . .` 三次短震；用户必须重新长按 3 秒才会重试。普通传感器无效、电机温度高或运动故障是需要被记录的研究对象，不能被笼统归类为“其他部件报错”而拒绝录制；只有缺少配置声明为 recorder-required 的硬件时才阻止开始。
+
+### 5.4 Stop、异常中止和精确边界
+
+- Start 成功后的第一帧带 `RECORD_START` 事件；
+- Stop 的松开沿所在控制拍带 `RECORD_STOP_REQUEST` 事件，随后关闭生产者入口；
+- TelemetryTask 排空此前已经接纳的帧，写最后完整块、footer、flush、close；
+- PROS 进入 Disabled、程序生命周期切换或退出当前控制任务时必须请求安全关闭，避免文件永久停在 Recording；导入器以“缺少 Y Stop marker + 最后 mode”识别 lifecycle stop，不得伪装成用户 Stop；
+- 正常完成后状态回到 `Idle`，目录永久保留；
+- 录制中 TF 被拔出或写/flush 失败时回到 `Idle(error-latched)`，触发三次短震；控制环不受影响；
+- 异常目录和临时文件不得删除。PC 导入器恢复至最后一个 CRC 正确块，并把试次标记为截断或 `REPEAT`。
+
+### 5.5 Controller 与 PC 的职责
+
+首版不实现 Controller 录制文字 UI；操作手后续可独立设计显示层。Controller 目前只负责 Left/Y 输入和录制失败三次短震。
+
+PC 不实时控制录制。用户把 TF 卡插入电脑后，导入器按每个独立录制目录逐次执行完整性检查、身份绑定、自动分析、GUI 输出和 LLM Markdown 证据包生成。
 
 ---
 
 ## 6. 机器人日志文件设计
 
-### 6.1 文件命名
+### 6.1 每次录制的独立目录
 
-第一版使用 microSD 根目录中的短文件名：
+每次成功的 Start 都分配独立且不覆盖的录制目录：
 
 ```text
-/usd/L<boot8>_<segment4>.V5L
-/usd/L<boot8>_<segment4>.MAN
+/usd/FLIGHT/<robot-id>/R<sequence>_T<start-monotonic-us>/
+  DATA.TMP       # Opening/Recording/Closing 或异常中止
+  DATA.V5L       # 正常 footer、flush、close 完成后由 TMP 提交
 ```
 
 示例：
 
 ```text
-/usd/L8A31D902_0007.V5L
+/usd/FLIGHT/1690X/R000007_T004123456789/DATA.V5L
 ```
 
-PC 导入后再使用可读的长目录名。这样避免 V5/PROS/VEXcode 对子目录和文件名支持差异。
+`sequence` 通过有界尝试创建目录并跳过 `EEXIST` 分配，因此跨重启仍不覆盖旧试次。Brain 没有已冻结可信日历时间源，目录中的 `T` 明确是本次 boot 的单调时间而不是伪造的年月日；PC 导入后用 PC 时间、队号、操作员和测试类型建立可读归档目录。若目标固件/卡型对目录操作存在兼容性问题，必须在 HIL 阶段阻止发布，不能静默退回覆盖式单文件。
 
 ### 6.2 文件结构
 
@@ -372,7 +371,7 @@ FileHeader
   frame_size_bytes
   endian_marker
   boot_id
-  segment_id
+  recording_sequence
   robot_id_hash
   config_hash
   software_commit_hash/truncated identity
@@ -403,10 +402,10 @@ FileFooter（正常关闭时存在）
 - 文件格式和 LogFrame schema 分开版本化；
 - 首版不在 Brain 上压缩，避免额外 CPU 和不可预测延迟；
 - PC 导入后生成 Parquet 并可压缩归档；
-- 文件缺 footer 时仍尝试恢复到最后一个 CRC 正确的完整块；
+- `DATA.TMP` 或文件缺 footer 时仍尝试恢复到最后一个 CRC 正确的完整块；
 - 恢复不等于试次有效，报告必须标记截断；
 - `frame_size_bytes` 必须与 ARM ABI 实际值匹配；
-- 建议在实现时增加 `static_assert(sizeof(LogFrame) == 728)`；schema 变化时同步更新。
+- 通过 ARM ABI `static_assert(sizeof(LogFrame) == 992)` 锁定 schema 2.0 实际帧长；schema 变化时必须同步版本、PC 解码器和容量预算。
 
 ### 6.3 环形缓冲和批量写
 
@@ -418,7 +417,7 @@ FileFooter（正常关闭时存在）
 - flush 周期和最大单次写固定；
 - 不逐帧 flush；
 - 写失败后有界退避；
-- 介质恢复时开启新 segment，不伪装成连续文件；
+- 介质恢复后只能由用户重新执行 3 秒 Start，建立新的录制目录，不伪装成连续文件；
 - 所有 producer drop、sink discard、CRC、open/write/flush/close 错误写入状态和下一个可用文件。
 
 ---
@@ -472,11 +471,12 @@ FileFooter（正常关闭时存在）
 - severity、safety state、affected motor mask；
 - first seen、duration、occurrence、recovery；
 - mode/epoch/command start/end；
-- marker start/stop；
+- `RECORD_START/RECORD_STOP_REQUEST/RECORD_COMPLETE/RECORD_ERROR`；
+- Left one-shot Coast 事件、stop-event epoch 和当拍最终输出；
 - microSD insert/remove/open/write/close；
 -人工中止、碰撞、碰线、滑移和备注时间点。
 
-当前 schema 1.0 尚缺 PID 分项、参考轨迹和部分事件字段。增加字段前必须冻结 schema 1.1/2.0 策略，并提供旧日志适配器。
+当前 schema 1.0 尚缺 PID 分项、参考轨迹和部分事件字段。首版产品接线必须明确记录“当前软件实际拥有”的全部信息；不存在的机构、电磁阀和自动程序信号以 capability/valid 位说明未实现，不得伪造采样值。增加字段前必须冻结 schema 1.1/2.0 策略，并提供旧日志适配器。
 
 ---
 
@@ -868,7 +868,7 @@ Evidence             12.40–13.85 s
 60 秒完整日志约：
 
 ```text
-728 B × 100 Hz × 60 s = 4.368 MB 二进制
+992 B × 100 Hz × 60 s = 5.952 MB 二进制
 ```
 
 展开为带列名的 Markdown/CSV 后会膨胀数倍，并超过多数 LLM 的有效上下文。逐行复制会降低分析质量，而不是提高完整性。
@@ -1016,12 +1016,13 @@ statusmonitor doctor
 - 文件格式、LogFrame schema 策略、事件 ID；
 - metadata、integrity、metrics 和 LLM report schema；
 - session/boot/segment/run 标识关系；
+- Left 单拍 Coast、Y 松开沿和 recording state/error 契约；
 - 16 GB microSD 首发支持策略；
 - golden files 和故障样本。
 
 验收：
 
-- ARM `LogFrame=728 B` 被测试锁定；
+- ARM `LogFrame` 实际字节数被 `static_assert` 和测试锁定；
 - major/minor 兼容规则明确；
 - 截断、CRC、错 endian、错 schema golden 文件齐全；
 - PC 无机器人即可解析 golden file。
@@ -1055,6 +1056,7 @@ statusmonitor doctor
 - TelemetryTask；
 - drop/high-water/sink counters；
 - 需要的 schema 字段扩展。
+- Y 长按/松开录制状态机和 recording control snapshot；
 
 验收：
 
@@ -1072,33 +1074,35 @@ statusmonitor doctor
 - 文件 header/block/footer/CRC；
 - 批量写、flush、轮转和退避；
 - 插拔、满盘、慢写、截断处理；
-- boot/segment manifest；
-- 1–2 Hz 可选时间信标。
+- 每次录制独立目录与跨 boot 不覆盖序号；
+- Start 两阶段提交、Stop 排空与 TMP→V5L 正常提交；
+- 失败三次短震事件。
 
 验收：
 
 - 16 GB 目标卡连续记录至少 60 分钟；
+- 缺卡/不可写/header 或 flush 失败时拒绝进入 Recording；
+- 每次 Start 生成新的独立目录，多次录制和重启均不覆盖；
 - microSD 拔出、写保护、满盘和慢写不改变控制；
 - PC 导入与 ARM 写出逐字段一致；
 - 100 Hz 文件无静默缺帧；
 - 关闭失败和掉电截断可检测。
 
-### WP4：PC Start/Stop 窗口和自动绑定
+### WP4：PC 独立录制目录导入和身份绑定
 
 交付：
 
-- Start/Stop UI；
-- PC monotonic timestamp；
-- TIME_BEACON 接收和时间映射；
-- boot/segment 文件推荐；
-- 前后 guard window；
+- TF 卡扫描和录制目录列表；
+- TMP/V5L 正常、异常状态识别；
+- 机器人单调时间与 PC 导入时间分别保存；
+- recording/session 身份绑定；
 - 自动运动分段；
-- Controller/command marker 支持。
+- Start/Stop/Left 事件支持。
 
 验收：
 
-- 无下行也能完成 session→文件绑定；
-- 时间信标丢失时明确降级为人工选择；
+- 无机器人实时链路也能完成 recording→session 绑定；
+- 多次录制可根据序号、时长、身份和事件明确选择；
 - 自动分段误差有 golden 测试；
 - 人工修改保留 audit。
 
@@ -1212,13 +1216,19 @@ MVP 不需要：
 
 ### 17.1 PC 单元/属性测试
 
+- Left 仅上升沿触发，持续按住不重复，下一拍新请求恢复；
+- Y 在 Idle 的 2.999 s/3.000 s 边界和 Recording 的 0.999 s/1.000 s 边界；
+- Y 只在松开沿触发，断连、时间回退和 epoch 变化取消长按；
+- Opening/Closing 期间重复 Y 不重入；
+- TF 缺失、open/header/write/flush/close 的逐点故障注入；
+- 每次录制独立目录、`EEXIST` 跳号、跨 boot 不覆盖；
 - 文件 header/block/footer round-trip；
 - CRC、截断、字节损坏、错 endian；
 - schema major/minor；
 - sequence gap、duplicate、out-of-order、time regression；
 - NaN/Inf 和非法枚举；
 - metadata 条件必填和身份冲突；
-- run/session/文件名不重复；
+- recording/run/session/目录和文件名不重复；
 - 非均匀时间导数；
 - filter 边界和群延迟；
 - FFT/Welch 重采样；
@@ -1229,6 +1239,9 @@ MVP 不需要：
 ### 17.2 集成测试
 
 - Fake 100 Hz → LogFrame → 文件 → import → Parquet → GUI/LLM；
+- 连续执行多次 Start/Stop，每次只产生一个独立目录；
+- Start 失败不进入 Recording 并只产生一次三短震告警；
+- Stop marker 为最后接纳帧，Closing 排空后 footer 计数一致；
 - 60 分钟合成运行；
 - 文件尾任意位置截断；
 - microSD 文件重复和跨 boot；
@@ -1237,7 +1250,7 @@ MVP 不需要：
 - 分析进程失败后恢复；
 - 旧 schema 日志；
 - 多 run compare；
-- 无时间信标时人工绑定。
+- 多个独立录制目录的人工/自动身份绑定。
 
 ### 17.3 HIL
 
@@ -1246,8 +1259,11 @@ MVP 不需要：
 - 插入、拔出、写保护、满盘、慢写；
 - TelemetryTask 暂停；
 - 环满；
-- 1–2 Hz Controller 时间信标；
 - Controller 断开和重连；
+- 实测 Left 当拍 Coast，按住不重复，下一拍合法请求恢复；
+- 实测 Y 3 秒 Start、1 秒 Stop 和短按取消；
+- 实测缺卡/只读卡拒绝 Start 并三次短震；
+- 实测每次录制独立目录和跨上电不覆盖；
 - Brain USB 直连导出候选；
 - telemetry 开/关时 `raw_dt/exec/jitter` A/B；
 - 掉电后的截断恢复。
@@ -1278,10 +1294,14 @@ MVP 不需要：
 - [ ] 队号、操作员、观察员、测试和工况可模板化；
 - [ ] PC 人工身份与机器人日志身份严格分域；
 - [ ] Start/Stop 窗口在无 PC→Brain 下行时仍可用；
+- [ ] Left 仅产生一次当拍 Coast，持有不重复，下一拍合法请求恢复；
+- [ ] Y 松开沿严格执行 Idle 3 秒 Start、Recording 1 秒 Stop；
+- [ ] 缺卡或不可写时拒绝进入 Recording 并触发三次短震；
+- [ ] 每次录制生成独立且永不覆盖的 TF 目录；
 - [ ] 机器人每控制拍只做定长 LogFrame 入环；
 - [ ] TelemetryTask、microSD 和控制路径隔离；
 - [ ] 16 GB microSD/TF FAT32 通过目标卡型 HIL；
-- [ ] 728 B/100 Hz 文件连续记录通过；
+- [ ] ARM 锁定帧长下的 100 Hz 文件连续记录通过；
 - [ ] microSD 缺失、拔出、慢写、满盘不改变控制；
 - [ ] 文件格式可检测 CRC、截断、缺帧、错 schema 和身份冲突；
 - [ ] PC 可导入、hash、只读归档、转 Parquet；
@@ -1302,12 +1322,13 @@ MVP 不需要：
 
 | 风险 | 影响 | 缓解 |
 |---|---|---|
-| PC Start/Stop 被误解为 Brain 命令 | 会话边界错误 | UI 明确“分析窗口”，使用连续日志和 guard window |
-| Controller 无反向用户通道 | 无法远程开始/停止 | 不依赖下行；精确打点用 Controller/command 事件 |
-| Controller 上行不稳定 | 时间映射变差 | 只作为可选信标；允许无信标人工绑定 |
+| Y 长按阈值被误触或跨断连延续 | 试次边界错误 | 只在松开沿判定；短按取消；断连、回退、epoch 变化清除 |
+| Left 被实现成持续 Coast | 操控被意外锁住 | 只消费上升沿并写 stop-event epoch；测试持有不重复和下一拍恢复 |
+| “所有部件报错”定义过宽 | 待诊断故障反而无法记录 | 仅 recorder integrity 和明确 required hardware 阻止 Start |
+| Controller 无反向用户通道 | PC 无法远程开始/停止 | Start/Stop 完全在 Brain 侧由 Y 触发 |
 | 官方 microSD 容量文档冲突 | 兼容性不确定 | 首发限定 16 GB FAT32；32 GB 单独 HIL |
 | microSD 慢写/拔出 | 丢帧或截断 | SPSC、批写、CRC、退避、分段和压力测试 |
-| 728 B schema 扩展 | 帧长和容量变化 | static_assert、版本化、golden、重算预算 |
+| schema 扩展 | 帧长和容量变化 | ARM static_assert、版本化、golden、重算预算 |
 | 位姿未校准 | 错误轨迹结论 | quality 门；当前显示 NOT AVAILABLE |
 | jerk 放大噪声 | 误判冲击 | 稳健导数、方法记录、敏感性分析 |
 | FFT 被误当 FRF | 错误控制结论 | 普通日志只报告 PSD；FRF 需已知激励 |
@@ -1327,8 +1348,9 @@ MVP 不需要：
 |---|---|
 | 终极策划案 | Implemented |
 | 当前 LogFrame/SPSC/Integrity 骨架 | Implemented / PC-tested status 以仓库测试为准 |
-| 产品级 LogFrame 接线 | NOT IMPLEMENTED |
-| microSD sink | NOT IMPLEMENTED |
+| 产品级 LogFrame 接线 | OFFLINE IMPLEMENTED / PC+ARM BUILD PASSED / HIL NOT TESTED |
+| microSD sink | OFFLINE IMPLEMENTED / HIL NOT TESTED |
+| Left 单拍 Coast / Y 录制状态机 | PC TESTED / ARM BUILD PASSED / HIL NOT TESTED |
 | PC 会话和导入 | NOT IMPLEMENTED |
 | GUI | NOT IMPLEMENTED |
 | LLM 报告 | NOT IMPLEMENTED |

@@ -1,7 +1,10 @@
 #include "robot/platform/fake_io.hpp"
 #include "robot/runtime/control_loop.hpp"
 #include "robot/telemetry/integrity.hpp"
+#include "robot/telemetry/flight_recorder.hpp"
 #include "robot/telemetry/replay.hpp"
+#include "robot/telemetry/recording.hpp"
+#include "robot/telemetry/recording_file.hpp"
 #include "robot/telemetry/spsc_ring.hpp"
 #include "robot/telemetry/telemetry_task.hpp"
 #include "test_framework.hpp"
@@ -40,6 +43,65 @@ class FailingSink final : public robot::TelemetrySink {
   }
   std::size_t observed{};
 };
+
+class MemoryRecordingSink final : public robot::RecordingSessionSink {
+ public:
+  bool begin(std::uint32_t sequence, std::uint32_t start_ms) override {
+    ++begin_count;
+    observed_sequence = sequence;
+    observed_start_ms = start_ms;
+    if (!begin_ok) {
+      last_error = robot::RecordingError::CardMissing;
+      return false;
+    }
+    return true;
+  }
+  bool write(const robot::LogFrame*, std::size_t count) override {
+    frame_count += count;
+    if (!write_ok) {
+      last_error = robot::RecordingError::DataWrite;
+      return false;
+    }
+    return true;
+  }
+  bool finish(std::uint32_t drops) override {
+    ++finish_count;
+    observed_drops = drops;
+    if (!finish_ok) {
+      last_error = robot::RecordingError::FooterWrite;
+      return false;
+    }
+    return true;
+  }
+  void abort() override { ++abort_count; }
+  robot::RecordingError error() const noexcept override {
+    return last_error;
+  }
+
+  bool begin_ok{true};
+  bool write_ok{true};
+  bool finish_ok{true};
+  robot::RecordingError last_error{robot::RecordingError::None};
+  std::uint32_t begin_count{};
+  std::uint32_t finish_count{};
+  std::uint32_t abort_count{};
+  std::uint32_t observed_sequence{};
+  std::uint32_t observed_start_ms{};
+  std::uint32_t observed_drops{};
+  std::size_t frame_count{};
+};
+
+robot::ControllerSnapshot recordingController(robot::TimeUs time_us,
+                                              std::uint32_t sequence,
+                                              bool y_down,
+                                              bool connected = true) {
+  robot::ControllerSnapshot controller{};
+  controller.h = {time_us, sequence, 7};
+  controller.buttons = y_down ? robot::kButtonY : 0;
+  controller.connected = connected;
+  controller.api_ok = connected;
+  return controller;
+}
 
 robot::HardwareConfig hardwareConfig() {
   robot::HardwareConfig hardware{};
@@ -151,4 +213,148 @@ ROBOT_TEST("raw replay preserves recorded timestamps and sequence") {
   ROBOT_REQUIRE(output.h.time_us == 25000);
   ROBOT_REQUIRE(output.h.sequence == 9);
   ROBOT_REQUIRE(!replay.next(output));
+}
+
+ROBOT_TEST("Y release applies three second start and one second stop thresholds") {
+  robot::RecordingControl control;
+  const robot::ModeSnapshot mode{
+      robot::CompetitionMode::Test, true, false, 7, 0, 0};
+
+  auto observed =
+      control.observe(recordingController(100, 1, true), mode);
+  ROBOT_REQUIRE(observed.state == robot::RecordingState::Idle);
+  observed =
+      control.observe(recordingController(3000099, 2, false), mode);
+  ROBOT_REQUIRE(observed.state == robot::RecordingState::Idle);
+  ROBOT_REQUIRE(observed.event_bits == robot::kRecordingNoEvent);
+
+  control.observe(recordingController(4000000, 3, true), mode);
+  observed =
+      control.observe(recordingController(7000000, 4, false), mode);
+  ROBOT_REQUIRE(observed.state == robot::RecordingState::Opening);
+  ROBOT_REQUIRE((observed.event_bits & robot::kRecordingStartRequested) != 0);
+  ROBOT_REQUIRE(control.markRecording());
+
+  control.observe(recordingController(8000000, 5, true), mode);
+  observed =
+      control.observe(recordingController(8999999, 6, false), mode);
+  ROBOT_REQUIRE(observed.state == robot::RecordingState::Recording);
+  ROBOT_REQUIRE(observed.event_bits == robot::kRecordingNoEvent);
+
+  control.observe(recordingController(9000000, 7, true), mode);
+  observed =
+      control.observe(recordingController(10000000, 8, false), mode);
+  ROBOT_REQUIRE(observed.state == robot::RecordingState::Closing);
+  ROBOT_REQUIRE((observed.event_bits & robot::kRecordingStopRequested) != 0);
+}
+
+ROBOT_TEST("Controller disconnect cancels a pending recording hold") {
+  robot::RecordingControl control;
+  const robot::ModeSnapshot mode{
+      robot::CompetitionMode::Test, true, false, 7, 0, 0};
+  control.observe(recordingController(100, 1, true), mode);
+  control.observe(recordingController(2000000, 2, true, false), mode);
+  const auto observed =
+      control.observe(recordingController(4000000, 3, false), mode);
+  ROBOT_REQUIRE(observed.state == robot::RecordingState::Idle);
+  ROBOT_REQUIRE(observed.event_bits == robot::kRecordingNoEvent);
+}
+
+ROBOT_TEST("recording worker closes only after queued frames are drained") {
+  robot::RecordingControl control;
+  const robot::ModeSnapshot mode{
+      robot::CompetitionMode::Test, true, false, 7, 0, 0};
+  control.observe(recordingController(100, 1, true), mode);
+  control.observe(recordingController(3000100, 2, false), mode);
+
+  robot::SpscRing<robot::LogFrame, 8> ring;
+  ROBOT_REQUIRE(ring.tryPush(robot::makeEmptyLogFrame({3000100, 2, 7}, 9)));
+  MemoryRecordingSink sink;
+  robot::RecordingWorker<8, 2> worker(control, ring, sink);
+  worker.tickOnce();
+  ROBOT_REQUIRE(control.state() == robot::RecordingState::Recording);
+  ROBOT_REQUIRE(sink.begin_count == 1);
+  ROBOT_REQUIRE(sink.frame_count == 1);
+
+  control.observe(recordingController(4000000, 3, true), mode);
+  control.observe(recordingController(5000000, 4, false), mode);
+  ROBOT_REQUIRE(ring.tryPush(robot::makeEmptyLogFrame({5000000, 4, 7}, 9)));
+  worker.tickOnce();
+  ROBOT_REQUIRE(sink.frame_count == 2);
+  ROBOT_REQUIRE(sink.finish_count == 1);
+  ROBOT_REQUIRE(control.state() == robot::RecordingState::Idle);
+}
+
+ROBOT_TEST("recording preflight failure refuses Recording and raises one alert") {
+  robot::RecordingControl control;
+  const robot::ModeSnapshot mode{
+      robot::CompetitionMode::Test, true, false, 7, 0, 0};
+  control.observe(recordingController(100, 1, true), mode);
+  control.observe(recordingController(3000100, 2, false), mode);
+  robot::SpscRing<robot::LogFrame, 8> ring;
+  MemoryRecordingSink sink;
+  sink.begin_ok = false;
+  robot::RecordingWorker<8, 2> worker(control, ring, sink);
+  worker.tickOnce();
+  ROBOT_REQUIRE(control.state() == robot::RecordingState::Idle);
+  ROBOT_REQUIRE(control.error() == robot::RecordingError::CardMissing);
+  ROBOT_REQUIRE(control.alertSequence() == 1);
+  ROBOT_REQUIRE(sink.abort_count == 1);
+}
+
+ROBOT_TEST("unavailable recorder task rejects Start without entering Opening") {
+  robot::RecordingControl control;
+  control.setAvailable(false);
+  const robot::ModeSnapshot mode{
+      robot::CompetitionMode::Test, true, false, 7, 0, 0};
+  control.observe(recordingController(100, 1, true), mode);
+  const auto observed =
+      control.observe(recordingController(3000100, 2, false), mode);
+  ROBOT_REQUIRE(observed.state == robot::RecordingState::Idle);
+  ROBOT_REQUIRE(observed.error == robot::RecordingError::Internal);
+  ROBOT_REQUIRE((observed.event_bits & robot::kRecordingFailed) != 0);
+  ROBOT_REQUIRE(control.alertSequence() == 1);
+}
+
+ROBOT_TEST("flight recorder keeps Start and Stop boundary frames") {
+  robot::RecordingControl control;
+  robot::SpscRing<robot::LogFrame, 16> ring;
+  robot::FlightRecorderProducer<16> producer(control, ring);
+  const robot::ModeSnapshot mode{
+      robot::CompetitionMode::Test, true, false, 7, 0, 0};
+
+  auto frame = robot::makeEmptyLogFrame({100, 1, 7}, 9);
+  producer.capture(mode, recordingController(100, 1, true), frame);
+  ROBOT_REQUIRE(ring.depth() == 0);
+
+  frame = robot::makeEmptyLogFrame({3000100, 2, 7}, 9);
+  producer.capture(mode, recordingController(3000100, 2, false), frame);
+  ROBOT_REQUIRE(ring.depth() == 1);
+  robot::LogFrame captured{};
+  ROBOT_REQUIRE(ring.tryPop(captured));
+  ROBOT_REQUIRE(
+      (captured.recording.event_bits & robot::kRecordingStartRequested) != 0);
+  ROBOT_REQUIRE(control.markRecording());
+
+  frame = robot::makeEmptyLogFrame({4000000, 3, 7}, 9);
+  producer.capture(mode, recordingController(4000000, 3, true), frame);
+  frame = robot::makeEmptyLogFrame({5000000, 4, 7}, 9);
+  producer.capture(mode, recordingController(5000000, 4, false), frame);
+  ROBOT_REQUIRE(ring.depth() == 2);
+  ROBOT_REQUIRE(ring.tryPop(captured));
+  ROBOT_REQUIRE(
+      (captured.recording.event_bits & robot::kRecordingStarted) != 0);
+  ROBOT_REQUIRE(ring.tryPop(captured));
+  ROBOT_REQUIRE(
+      (captured.recording.event_bits & robot::kRecordingStopRequested) != 0);
+}
+
+ROBOT_TEST("recording file CRC changes when a frame byte changes") {
+  auto frame = robot::makeEmptyLogFrame({100, 1, 7}, 9);
+  const auto first = robot::telemetryCrc32(
+      reinterpret_cast<const std::uint8_t*>(&frame), sizeof(frame));
+  frame.header.sequence = 2;
+  const auto second = robot::telemetryCrc32(
+      reinterpret_cast<const std::uint8_t*>(&frame), sizeof(frame));
+  ROBOT_REQUIRE(first != second);
 }
