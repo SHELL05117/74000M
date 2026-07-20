@@ -19,3 +19,14 @@ temp.errors
 # PC build and test output
 build/
 Testing/
+
+# Status monitor local runtime
+statusmonitor/artifacts/
+statusmonitor/pc/.venv/
+statusmonitor/pc/.pytest_cache/
+statusmonitor/pc/.ruff_cache/
+statusmonitor/pc/build/
+statusmonitor/pc/dist/
+statusmonitor/pc/*.spec
+statusmonitor/pc/**/__pycache__/
+statusmonitor/pc/**/*.egg-info/

@@ -1,12 +1,12 @@
 # VEX V5 飞行记录、赛后自动诊断与调参证据系统终极策划案
 
-> 文档版本：3.3 Ultimate / Flight Recorder Causal Trace Audit
+> 文档版本：3.4 Ultimate / PC Implementation Checkpoint
 > 创作：OpenAI GPT-5.6（Codex）  
 > 创作日期：2026-07-20  
 > 适用项目：74000M / 当前 1690X 样机 VEX V5 PROS C++17 工程  
 > 对应计划板块：板块 0、5；为板块 12、22 提供数据和报告基础  
-> 当前状态：机器人端 P0 离线实现；PC 只读完整性检查 CLI 已实现；完整分析端待实施
-> 当前验证等级：文档、PC 单元测试和 PROS ARM 构建 `Implemented/Passed`；真实 TF 卡、HIL、USB 导出和现场效果仍为 `NOT TESTED`
+> 当前状态：机器人端 P0 离线实现；PC 会话、流式导入、完整性、Parquet、分析、GUI、比较、重放和 LLM 证据包已实现
+> 当前验证等级：PC 自动测试、60 分钟合成流式导入、GUI smoke test 和 PROS ARM 构建按仓库最新测试记录；真实 TF 卡、HIL、USB 导出和现场效果仍为 `NOT TESTED`
 
 ---
 
@@ -207,10 +207,10 @@ sizeof(robot::LogFrame) = 1536 B
 | 16 GB | 约 29 小时 |
 | 32 GB | 约 58 小时 |
 
-当前缺口：
+当前缺口与最新推进：
 
 - 产品级 SPSC、TelemetryTask、控制拍 LogFrame builder、TF 块文件和平台无关校验器已离线实现并通过 PC/ARM 构建，尚待真卡 HIL；
-- 已有 PC 只读完整性检查 CLI；尚没有会话身份向导、复制归档、SQLite/Parquet、自动分析、GUI 和 LLM 报告程序；
+- PC 端已实现会话/模板、SQLite、TF 扫描、SHA-256 只读归档、流式 V5L2→Parquet、完整性硬门、自动分段、基础/高级分析、八页 PySide6 GUI、运行比较、记录证据重放和 LLM Markdown 证据包；
 - 当前控制栈没有运行中的 PID P/I/D/FF、参考轨迹、机构、气动或自动程序实例；schema 3.1 用 availability 位明确记录这些层未接入，不能将零值解释为真实采样；
 - 当前配置没有 IMU，`pose_good=false`，二维位姿不能宣称有效；
 - 当前样机配置身份为 `1690X`，PC 默认队号 `74000M` 不能覆盖机器人上报身份；
@@ -1054,7 +1054,7 @@ statusmonitor doctor
 
 ### WP1：PC 离线导入、完整性和会话骨架
 
-当前进度：流式 V5L2 完整性检查 CLI 已实现并纳入 CTest；其余交付待实施。
+当前进度：C++ 流式完整性 CLI 与 Python PC 应用均已实现；Python 导入器按块验证并写 Parquet，具备会话/模板、SQLite、SHA-256 和只读归档。
 
 交付：
 
@@ -1369,7 +1369,7 @@ MVP 不需要：
 
 ## 20. 当前能力声明
 
-本策划案只完成终极架构和实施计划，不代表功能已经实现。
+本策划案同时记录终极架构与当前实施状态；PC 软件已有实现与自动证据，但没有真机/HIL 证据的项目仍不得视为通过。
 
 | 项目 | 当前状态 |
 |---|---|
@@ -1380,9 +1380,9 @@ MVP 不需要：
 | microSD sink | OFFLINE IMPLEMENTED / HIL NOT TESTED |
 | Left 单拍 Coast / Y 录制状态机 | PC TESTED / ARM BUILD PASSED / HIL NOT TESTED |
 | PC V5L2 流式完整性检查 CLI | IMPLEMENTED / PC TESTED |
-| PC 会话和导入 | NOT IMPLEMENTED |
-| GUI | NOT IMPLEMENTED |
-| LLM 报告 | NOT IMPLEMENTED |
+| PC 会话和导入 | IMPLEMENTED / PC TESTED |
+| GUI | IMPLEMENTED / OFFSCREEN SMOKE TESTED |
+| LLM 报告 | IMPLEMENTED / PC TESTED |
 | 16 GB microSD HIL | NOT TESTED |
 | 32 GB microSD | NOT SUPPORTED UNTIL TESTED |
 | Controller 时间信标 | NOT IMPLEMENTED / NOT TESTED |

@@ -1,0 +1,53 @@
+schema_name: VEX_V5L2_LogFrame_3_1
+authored_by: OpenAI GPT-5.6 (Codex)
+byte_order: little
+file:
+  magic: 0x324C3556
+  format: 2.0
+  header_bytes: 160
+  block_header_bytes: 28
+  footer_bytes: 48
+  crc: CRC-32/ISO-HDLC
+  block_sequence_origin: 1
+log_frame:
+  magic: 0x374D3030
+  schema: 3.1
+  bytes: 1536
+  nominal_rate_hz: 100
+  timestamp: robot_monotonic_time_us
+compatibility:
+  major_change: reject_until_adapter_exists
+  newer_minor: conditional_until_semantics_are_reviewed
+  frame_size_change: reject
+integrity_order:
+  - file_header_magic_format_endian_size_crc
+  - block_header_sequence_size_crc
+  - payload_crc
+  - frame_magic_schema_size_run_identity
+  - frame_sequence_and_monotonic_time
+  - footer_crc_and_count_identity
+  - producer_drop_and_numeric_quality_audit
+availability_bits:
+  0: raw_inputs
+  1: validated_state
+  2: pose_state
+  3: driver_mapping
+  4: request_candidate
+  5: arbitration
+  6: actuator_intent
+  7: output_status
+  8: fault_manager
+  9: pid_terms
+  10: mechanisms
+  11: pneumatics
+  12: autonomous_program
+  13: competition_input
+quality:
+  0: Good
+  1: Degraded
+  2: Invalid
+rules:
+  - A numeric zero is a measurement only when its availability and quality gates allow it.
+  - Pose unavailable or invalid forbids trajectory-performance PASS.
+  - Raw V5L2 bytes are immutable and every archive copy is bound by SHA-256.
+  - Parquet, plots, metrics, and reports are derived artifacts with an analysis version.
