@@ -268,20 +268,20 @@ inline RobotConfig make1690XCommissioningConfig() {
   config.identity = {"1690X", "1690X", "1690X SAMPLE", "commission", 0,
                      2, 0};
   config.hardware.left = {{
-      motorFromReversedFlag(11, 600, false,
-                            kRatio6MotorRevPerWheelRev),
-      motorFromReversedFlag(12, 200, true,
-                            kRatio18MotorRevPerWheelRev),
-      motorFromReversedFlag(13, 600, true,
-                            kRatio6MotorRevPerWheelRev),
+      motorFromReversedFlag(3, 600, true,
+                            kRatio6MotorRevPerWheelRev),   // Front: reverse
+      motorFromReversedFlag(2, 200, true,
+                            kRatio18MotorRevPerWheelRev),  // Middle: reverse
+      motorFromReversedFlag(1, 600, false,
+                            kRatio6MotorRevPerWheelRev),   // Rear: forward
   }};
   config.hardware.right = {{
-      motorFromReversedFlag(1, 600, true,
-                            kRatio6MotorRevPerWheelRev),
-      motorFromReversedFlag(2, 200, false,
-                            kRatio18MotorRevPerWheelRev),
-      motorFromReversedFlag(3, 600, false,
-                            kRatio6MotorRevPerWheelRev),
+      motorFromReversedFlag(13, 600, false,
+                            kRatio6MotorRevPerWheelRev),   // Front: forward
+      motorFromReversedFlag(12, 200, false,
+                            kRatio18MotorRevPerWheelRev),  // Middle: forward
+      motorFromReversedFlag(11, 600, true,
+                            kRatio6MotorRevPerWheelRev),   // Rear: reverse
   }};
   config.hardware.imu = {false, 0};
   config.geometry = {0.06985, 0.1524};

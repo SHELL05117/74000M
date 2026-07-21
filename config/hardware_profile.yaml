@@ -2,11 +2,11 @@
 #
 # Ports, cartridges, direction flags, drive-wheel size, nominal track width and
 # tooth paths were supplied by the operator. Calibration fields remain null.
-# The six direction booleans came from VEX motor-constructor arguments and are
-# stored directly as runtime reversed flags. The previous polarity inversion
-# made positive chassis voltage move the robot backward; the corrected values
-# below still require an airborne repeat test. Official capabilities remain
-# locked while verification.hardware is not HILValidated or better.
+# Position, port, cartridge and direction assignments were supplied by the
+# operator on 2026-07-21. "reverse" is stored as reversed=true and "forward"
+# as reversed=false. The new mapping requires an airborne per-port direction
+# test. Official capabilities remain locked while verification.hardware is not
+# HILValidated or better.
 
 identity:
   schema_version: 2
@@ -33,13 +33,13 @@ coordinate_contract:
 
 hardware:
   left_drive:
-    - { smart_port: 11, reversed: false, cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # LA; 36T -> 48T
-    - { smart_port: 12, reversed: true,  cartridge_rpm: 200, motor_rev_per_wheel_rev: 0.4444444444444444 } # LM; 36T -> 12T, coaxial 36T -> 48T
-    - { smart_port: 13, reversed: true,  cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # LB; 36T -> 48T
+    - { position: front,  smart_port: 3, reversed: true,  cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # 6:1; 36T -> 48T
+    - { position: middle, smart_port: 2, reversed: true,  cartridge_rpm: 200, motor_rev_per_wheel_rev: 0.4444444444444444 } # 18:1; 36T -> 12T, coaxial 36T -> 48T
+    - { position: rear,   smart_port: 1, reversed: false, cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # 6:1; 36T -> 48T
   right_drive:
-    - { smart_port: 1, reversed: true,  cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # RA; 36T -> 48T
-    - { smart_port: 2, reversed: false, cartridge_rpm: 200, motor_rev_per_wheel_rev: 0.4444444444444444 } # RM; 36T -> 12T, coaxial 36T -> 48T
-    - { smart_port: 3, reversed: false, cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # RB; 36T -> 48T
+    - { position: front,  smart_port: 13, reversed: false, cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # 6:1; 36T -> 48T
+    - { position: middle, smart_port: 12, reversed: false, cartridge_rpm: 200, motor_rev_per_wheel_rev: 0.4444444444444444 } # 18:1; 36T -> 12T, coaxial 36T -> 48T
+    - { position: rear,   smart_port: 11, reversed: true,  cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # 6:1; 36T -> 48T
   imu:
     installed: false
     smart_port: null
@@ -72,7 +72,7 @@ verification:
   hardware: "Unverified"
   field: "Unverified"
   competition: "Unverified"
-  last_direction_observation: "Previous inverted config: forward stick moved robot backward; corrected config awaiting airborne repeat"
+  last_direction_observation: "2026-07-21 operator remap is recorded; per-port airborne direction test pending"
 
 capabilities:
   hardware_output: false

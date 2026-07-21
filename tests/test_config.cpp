@@ -37,29 +37,29 @@ ROBOT_TEST("1690X commissioning profile is structurally valid but locked") {
 ROBOT_TEST("offline profile preserves supplied six-motor drivetrain facts") {
   const auto config = robot::makeOfflineRobotConfig();
 
-  ROBOT_REQUIRE(config.hardware.left[0].smart_port == 11);
+  ROBOT_REQUIRE(config.hardware.left[0].smart_port == 3);
   ROBOT_REQUIRE(config.hardware.left[0].cartridge_rpm == 600);
-  ROBOT_REQUIRE(!config.hardware.left[0].reversed);
+  ROBOT_REQUIRE(config.hardware.left[0].reversed);
   ROBOT_REQUIRE_NEAR(config.hardware.left[0].motor_rev_per_wheel_rev,
                      4.0 / 3.0, 1e-12);
-  ROBOT_REQUIRE(config.hardware.left[1].smart_port == 12);
+  ROBOT_REQUIRE(config.hardware.left[1].smart_port == 2);
   ROBOT_REQUIRE(config.hardware.left[1].cartridge_rpm == 200);
   ROBOT_REQUIRE(config.hardware.left[1].reversed);
   ROBOT_REQUIRE_NEAR(config.hardware.left[1].motor_rev_per_wheel_rev,
                      4.0 / 9.0, 1e-12);
-  ROBOT_REQUIRE(config.hardware.left[2].smart_port == 13);
+  ROBOT_REQUIRE(config.hardware.left[2].smart_port == 1);
   ROBOT_REQUIRE(config.hardware.left[2].cartridge_rpm == 600);
-  ROBOT_REQUIRE(config.hardware.left[2].reversed);
+  ROBOT_REQUIRE(!config.hardware.left[2].reversed);
 
-  ROBOT_REQUIRE(config.hardware.right[0].smart_port == 1);
+  ROBOT_REQUIRE(config.hardware.right[0].smart_port == 13);
   ROBOT_REQUIRE(config.hardware.right[0].cartridge_rpm == 600);
-  ROBOT_REQUIRE(config.hardware.right[0].reversed);
-  ROBOT_REQUIRE(config.hardware.right[1].smart_port == 2);
+  ROBOT_REQUIRE(!config.hardware.right[0].reversed);
+  ROBOT_REQUIRE(config.hardware.right[1].smart_port == 12);
   ROBOT_REQUIRE(config.hardware.right[1].cartridge_rpm == 200);
   ROBOT_REQUIRE(!config.hardware.right[1].reversed);
-  ROBOT_REQUIRE(config.hardware.right[2].smart_port == 3);
+  ROBOT_REQUIRE(config.hardware.right[2].smart_port == 11);
   ROBOT_REQUIRE(config.hardware.right[2].cartridge_rpm == 600);
-  ROBOT_REQUIRE(!config.hardware.right[2].reversed);
+  ROBOT_REQUIRE(config.hardware.right[2].reversed);
 
   for (const auto& motor : config.hardware.left)
     ROBOT_REQUIRE_NEAR(robot::nominalWheelRpm(motor), 450.0, 1e-9);
