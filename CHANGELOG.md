@@ -4,6 +4,8 @@ This file records implementation commits in simple English. Dedicated `chore(log
 
 ## 2026-07-21
 
+- 0bf91821b3b659ee9c8fe4e2c7b55cb2db99cd66 — Set the default PROS upload slot to 1.
+
 - 159d7edf4a7ab6650ed1cf39486f3bb4f715bb34 - Added Axis2 Lift control with startup zeroing, Hold behavior, and guarded travel limits.
 
 - fded04620caca5f3bad4e22c3e8cffd957930207 - Reverted the selectable split-stick Curvature controls and restored the original left-stick Curvature mapping.
