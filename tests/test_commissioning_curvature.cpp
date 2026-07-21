@@ -16,13 +16,11 @@ robot::ModeSnapshot testMode(std::uint32_t epoch = 7) {
 robot::ControllerSnapshot controllerFor(const robot::FrameHeader& header,
                                         std::uint32_t buttons = 0,
                                         double left_y = 0.0,
-                                        double left_x = 0.0,
-                                        double right_x = 0.0) {
+                                        double left_x = 0.0) {
   robot::ControllerSnapshot controller{};
   controller.h = header;
   controller.left_y = left_y;
   controller.left_x = left_x;
-  controller.right_x = right_x;
   controller.buttons = buttons;
   controller.connected = true;
   controller.api_ok = true;
@@ -39,8 +37,6 @@ robot::TimingSample timingFor(const robot::FrameHeader& header) {
 
 robot::CommissioningCurvatureConfig directMappingConfig() {
   auto config = robot::make1690XCommissioningCurvatureConfig();
-  config.input_mode =
-      robot::CommissioningCurvatureInputMode::SingleLeftStick;
   config.throttle_shape = {0.0, 0.0, 0.0};
   config.turn_shape = {0.0, 0.0, 0.0};
   config.throttle_rise_per_s = 1000.0;
@@ -57,42 +53,6 @@ ROBOT_TEST("commissioning Curvature requires ordered automatic turn gates") {
   ROBOT_REQUIRE(robot::validCommissioningCurvatureConfig(config));
   config.quick_turn_exit_throttle = config.quick_turn_enter_throttle;
   ROBOT_REQUIRE(!robot::validCommissioningCurvatureConfig(config));
-}
-
-ROBOT_TEST("commissioning Curvature global mode defaults to split sticks") {
-  const auto config = robot::make1690XCommissioningCurvatureConfig();
-  ROBOT_REQUIRE(robot::kCommissioningCurvatureInputMode ==
-                robot::CommissioningCurvatureInputMode::SplitSticks);
-  ROBOT_REQUIRE(config.input_mode ==
-                robot::CommissioningCurvatureInputMode::SplitSticks);
-}
-
-ROBOT_TEST("commissioning Curvature selects left or right turn stick") {
-  const robot::OwnerToken owner{42, robot::Requirement::kDrivetrain, 3, 7};
-  const auto mode = testMode();
-  const robot::FrameHeader header{10000, 1, 7};
-  const auto controller = controllerFor(header, 0, 0.5, -0.5, 0.5);
-
-  auto single_config = directMappingConfig();
-  robot::CommissioningCurvatureMapper single_mapper(single_config);
-  auto result = single_mapper.update(header, mode, controller, 0.01, owner);
-  ROBOT_REQUIRE(result.valid);
-  auto* payload =
-      std::get_if<robot::WheelVoltagePayload>(&result.request.payload);
-  ROBOT_REQUIRE(payload != nullptr);
-  ROBOT_REQUIRE_NEAR(payload->left_V, 3.0, 1e-12);
-  ROBOT_REQUIRE_NEAR(payload->right_V, 9.0, 1e-12);
-
-  auto split_config = directMappingConfig();
-  split_config.input_mode =
-      robot::CommissioningCurvatureInputMode::SplitSticks;
-  robot::CommissioningCurvatureMapper split_mapper(split_config);
-  result = split_mapper.update(header, mode, controller, 0.01, owner);
-  ROBOT_REQUIRE(result.valid);
-  payload = std::get_if<robot::WheelVoltagePayload>(&result.request.payload);
-  ROBOT_REQUIRE(payload != nullptr);
-  ROBOT_REQUIRE_NEAR(payload->left_V, 9.0, 1e-12);
-  ROBOT_REQUIRE_NEAR(payload->right_V, 3.0, 1e-12);
 }
 
 ROBOT_TEST("commissioning Curvature drives immediately and neutral coasts") {
@@ -360,7 +320,7 @@ ROBOT_TEST("automatic Quick Turn reaches full voltage in one nominal frame") {
 
   const robot::FrameHeader header{10000, 1, 7};
   const auto frame = cycle.update(header, mode, raw,
-                                  controllerFor(header, 0, 0.0, 0.0, 1.0),
+                                  controllerFor(header, 0, 0.0, 1.0),
                                   timingFor(header));
   ROBOT_REQUIRE(frame.owner == robot::RequestSource::Test);
   ROBOT_REQUIRE_NEAR(frame.left_V, 12.0, 1e-9);

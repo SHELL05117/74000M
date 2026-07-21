@@ -16,25 +16,11 @@ enum class CommissioningDriveState : std::uint8_t {
   Coasting,
 };
 
-enum class CommissioningCurvatureInputMode : std::uint8_t {
-  SingleLeftStick,
-  SplitSticks,
-};
-
-// Change this one global compile-time constant to select the driver layout.
-// SingleLeftStick: Left Y = throttle, Left X = turn.
-// SplitSticks:     Left Y = throttle, Right X = turn.
-inline constexpr CommissioningCurvatureInputMode
-    kCommissioningCurvatureInputMode =
-        CommissioningCurvatureInputMode::SplitSticks;
-
 inline constexpr StopMode kCommissioningStopMode = StopMode::Coast;
 
 struct CommissioningCurvatureConfig {
   AxisShapeConfig throttle_shape{};
   AxisShapeConfig turn_shape{};
-  CommissioningCurvatureInputMode input_mode{
-      kCommissioningCurvatureInputMode};
   double throttle_rise_per_s{};
   double throttle_fall_per_s{};
   double turn_rise_per_s{};
@@ -77,11 +63,7 @@ make1690XCommissioningCurvatureConfig() {
 
 inline bool validCommissioningCurvatureConfig(
     const CommissioningCurvatureConfig& config) noexcept {
-  const bool valid_input_mode =
-      config.input_mode ==
-          CommissioningCurvatureInputMode::SingleLeftStick ||
-      config.input_mode == CommissioningCurvatureInputMode::SplitSticks;
-  return valid_input_mode && validAxisShape(config.throttle_shape) &&
+  return validAxisShape(config.throttle_shape) &&
          validAxisShape(config.turn_shape) &&
          std::isfinite(config.throttle_rise_per_s) &&
          config.throttle_rise_per_s > 0.0 &&
@@ -167,12 +149,8 @@ class CommissioningCurvatureMapper {
 
     const double centered_throttle =
         centeredAxis(controller.left_y, config_.throttle_shape);
-    const double raw_turn =
-        config_.input_mode == CommissioningCurvatureInputMode::SplitSticks
-            ? controller.right_x
-            : controller.left_x;
     const double centered_turn =
-        centeredAxis(raw_turn, config_.turn_shape);
+        centeredAxis(controller.left_x, config_.turn_shape);
     const double throttle_target =
         shapeCenteredAxis(centered_throttle, config_.throttle_shape);
     const double turn_target =
@@ -206,9 +184,9 @@ class CommissioningCurvatureMapper {
     }
     result.quick_turn_active = quick_turn_active_;
 
-    // Both layouts use the same Curvature mapping and safety path. Positive
-    // selected X requests a right turn. Low commanded throttle and a nonzero
-    // turn command automatically select full-gain Quick Turn.
+    // Single-left-stick Curvature: normal steering scales with |throttle|.
+    // Positive Left X requests a right turn. Low commanded throttle and a
+    // nonzero turn command automatically select full-gain Quick Turn.
     const double differential_turn = std::clamp(
         result.shaped_turn *
             (result.quick_turn_active
