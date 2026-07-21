@@ -4,6 +4,7 @@ This file records implementation commits in simple English. Dedicated `chore(log
 
 ## 2026-07-21
 
+- 213b4134f24692ec4e71cbb820dd1701d44b5d3c — Added the guided TF session workflow with a three-choice home, step-by-step import, history, and automatic results.
 - df2acd5d8bd0bd2e8ead867dc092665a7a52bacc — Added the Chinese Swiss-grid desktop interface while preserving all PC analysis workflows.
 - 63245809280c3f20286663223d6ae3715afc742a — Added the complete PC flight-log import, integrity, analysis, GUI, comparison, replay, reporting, and Windows packaging system.
 
