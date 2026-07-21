@@ -1,3 +1,4 @@
+#include "robot/config/robot_profiles.hpp"
 #include "robot/platform/fake_io.hpp"
 #include "robot/runtime/control_loop.hpp"
 #include "robot/telemetry/integrity.hpp"
@@ -488,7 +489,7 @@ ROBOT_TEST("recording CRC supports incremental file reads") {
 }
 
 ROBOT_TEST("recording codec round trips identity frames and footer") {
-  const robot::RobotConfig config = robot::make1690XCommissioningConfig();
+  const robot::RobotConfig config = robot::makeSelectedRobotConfig();
   const auto metadata =
       robot::makeRecordingMetadata(config, 0x1122334455667788ull,
                                    "0123456789abcdef", false);
@@ -516,7 +517,8 @@ ROBOT_TEST("recording codec round trips identity frames and footer") {
   ROBOT_REQUIRE(report.header.session_sequence == 3);
   ROBOT_REQUIRE(report.header.storage_sequence == 17);
   ROBOT_REQUIRE(report.header.run_id_hash == run_id);
-  ROBOT_REQUIRE(std::strcmp(report.header.robot_id, "1690X") == 0);
+  ROBOT_REQUIRE(std::strcmp(report.header.robot_id,
+                            robot::selectedRobotId()) == 0);
 
   robot::LogFrame decoded{};
   ROBOT_REQUIRE(robot::copyVerifiedRecordingFrame(
@@ -526,7 +528,7 @@ ROBOT_TEST("recording codec round trips identity frames and footer") {
 
 ROBOT_TEST("recording verifier rejects an empty recording") {
   const auto metadata = robot::makeRecordingMetadata(
-      robot::make1690XCommissioningConfig(), 56, "UNKNOWN", true);
+      robot::makeSelectedRobotConfig(), 56, "UNKNOWN", true);
   MemoryByteWriter writer;
   robot::RecordingFileEncoder encoder;
   ROBOT_REQUIRE(encoder.begin(writer, metadata, 1, 1, 100));
@@ -589,7 +591,7 @@ ROBOT_TEST("control log preserves per-motor values timestamps and API status") {
 
 ROBOT_TEST("recording verifier recovers complete blocks from a truncated file") {
   const auto metadata = robot::makeRecordingMetadata(
-      robot::make1690XCommissioningConfig(), 55, "UNKNOWN", true);
+      robot::makeSelectedRobotConfig(), 55, "UNKNOWN", true);
   MemoryByteWriter writer;
   robot::RecordingFileEncoder encoder;
   ROBOT_REQUIRE(encoder.begin(writer, metadata, 1, 1, 100));
@@ -619,7 +621,7 @@ ROBOT_TEST("recording verifier recovers complete blocks from a truncated file") 
 
 ROBOT_TEST("recording encoder reports bounded writer failure") {
   const auto metadata = robot::makeRecordingMetadata(
-      robot::make1690XCommissioningConfig(), 77);
+      robot::makeSelectedRobotConfig(), 77);
   MemoryByteWriter writer;
   writer.fail_after = sizeof(robot::RecordingFileHeader) +
                       sizeof(robot::RecordingBlockHeader);
@@ -632,7 +634,7 @@ ROBOT_TEST("recording encoder reports bounded writer failure") {
 
 ROBOT_TEST("recording verifier rejects endian schema and footer corruption") {
   const auto metadata = robot::makeRecordingMetadata(
-      robot::make1690XCommissioningConfig(), 88);
+      robot::makeSelectedRobotConfig(), 88);
   MemoryByteWriter writer;
   robot::RecordingFileEncoder encoder;
   ROBOT_REQUIRE(encoder.begin(writer, metadata, 2, 2, 0));

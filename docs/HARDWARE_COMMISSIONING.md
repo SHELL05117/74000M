@@ -95,7 +95,7 @@ hardware_output = true  // 仍只允许受限 Test 请求
 
 - Driver → Disabled → Driver，旧 epoch 满幅帧不能复活；
 - 请求停止更新后，请求 TTL 触发停止；
-- ControlLoop 停止发布后，输出 TTL 触发配置的 `stop()`/`brake()` 路径；当前 1690X 样机使用 `Coast`；
+- ControlLoop 停止发布后，输出 TTL 触发配置的 `stop()`/`brake()` 路径；当前 492X/492Z 共享策略使用 `Coast`；
 - 未来时间戳、乱序、NaN/Inf、错误 owner lease 均不能输出；
 - Controller 断联后取消驾驶请求、清有记忆状态且不转给自动；
 - UI、SD 和日志任务卡住时控制输出和周期预算不变。
@@ -151,8 +151,8 @@ pose_good = true
 - throttle/turn 上升、下降和换向 Slew；
 - 曲率增益、Quick Turn 阈值和限制；
 - 输出 Slew 与输入 Slew 的分工；
-- 当前 1690X 快速候选使用线性 throttle、输入 rise/fall `100/s`、最终输出 rise/fall `1200 V/s`，名义上在一个 `10 ms` 控制帧内从 0 到 12 V；旧 `3/s`、`36 V/s` 和后续 `20/s`、`240 V/s` 均已收到“加速度偏慢”的 HIL 反馈，新值仍需按正/反、多次重复验证抓地、电流与直线性；
-- 零请求的 Coast/Brake 策略；当前 1690X 手动样机统一为 `Coast`，仍需实测自由滑行距离；
+- 当前 492X/492Z 共享快速候选使用线性 throttle、输入 rise/fall `100/s`、最终输出 rise/fall `1200 V/s`，名义上在一个 `10 ms` 控制帧内从 0 到 12 V；旧 `3/s`、`36 V/s` 和后续 `20/s`、`240 V/s` 均已收到“加速度偏慢”的 HIL 反馈，新值仍需在两台机器上分别按正/反、多次重复验证抓地、电流与直线性；
+- 零请求的 Coast/Brake 策略；当前 492X/492Z 手动配置统一为 `Coast`，仍需分别实测自由滑行距离；
 - 航向辅助进入/退出速度、杆中立门、`kP/kD` 和最大修正；
 - 驾驶档位、最大输出和低电/降额下手感。
 - Lift Axis2 死区、线性手感、最大电压、上下端减速区、830 deg 实际行程、10 deg 软件余量和双编码器 25 deg 不一致阈值；这些均为 HIL 候选。

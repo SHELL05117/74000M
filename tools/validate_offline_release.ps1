@@ -17,7 +17,7 @@ function Require-Success {
 Push-Location $root
 try {
     $configure = Require-Success "CMake configure" {
-        & cmake -S . -B build -DBUILD_TESTING=ON
+        & cmake -S . -B build -DBUILD_TESTING=ON -DROBOT_PROFILE=492Z
     }
     $pcBuild = Require-Success "PC build" {
         & cmake --build build --config Debug
@@ -50,12 +50,16 @@ try {
     }
     $env:Path = "$toolchain;$env:Path"
     $prosBuild = Require-Success "PROS build" {
-        & $make quick
+        & $make quick ROBOT_PROFILE=492Z
     }
 
     $commit = (git rev-parse HEAD).Trim()
-    $configHash = (Get-FileHash -Algorithm SHA256 `
-        config\hardware_profile.yaml).Hash.ToLowerInvariant()
+    $configHashes = [ordered]@{
+        "492X" = (Get-FileHash -Algorithm SHA256 `
+            config\robots\492X.yaml).Hash.ToLowerInvariant()
+        "492Z" = (Get-FileHash -Algorithm SHA256 `
+            config\robots\492Z.yaml).Hash.ToLowerInvariant()
+    }
     $dirty = @(git status --porcelain | Where-Object {
         $_ -notmatch 'GitHub address\.txt'
     })
@@ -63,8 +67,8 @@ try {
         schema_version = 1
         generated_utc = [DateTime]::UtcNow.ToString("o")
         source_commit = $commit
-        hardware_profile_sha256 = $configHash
-        robot_id = "UNVERIFIED_74000M"
+        hardware_profile_sha256 = $configHashes
+        robot_id = "492Z"
         calibration_revision = 0
         pc_tests = $testSummary
         ctest = "PASS"
@@ -85,7 +89,7 @@ try {
     Write-Output "OFFLINE RELEASE VALIDATION: PASS"
     Write-Output $testSummary
     Write-Output "source commit: $commit"
-    Write-Output "hardware profile sha256: $configHash"
+    Write-Output "hardware profile sha256: $($configHashes | ConvertTo-Json -Compress)"
     Write-Output "evidence: $evidencePath"
 }
 finally {

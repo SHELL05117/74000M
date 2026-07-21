@@ -37,8 +37,8 @@ constexpr MotorPortConfig motorFromForwardFlag(
 }
 
 // Stores a VEX/PROS motor-constructor reversal flag without changing its
-// polarity. The 1690X values were supplied in this form and HIL observation
-// showed that inverting them made the complete chassis drive backward.
+// polarity. Both robot profiles use the same supplied mechanical polarity;
+// only their Smart Port assignments differ.
 constexpr MotorPortConfig motorFromReversedFlag(
     std::int8_t smart_port, std::uint16_t cartridge_rpm, bool reversed,
     double motor_rev_per_wheel_rev = 1.0) noexcept {
@@ -284,54 +284,6 @@ inline ConfigCheck validateConfig(const RobotConfig& config,
       result.structurally_valid && hardware_verified &&
       config.capabilities.hardware_output;
   return result;
-}
-
-inline RobotConfig make1690XCommissioningConfig() {
-  RobotConfig config{};
-  constexpr double kRatio6MotorRevPerWheelRev = 48.0 / 36.0;
-  constexpr double kRatio18MotorRevPerWheelRev =
-      (12.0 / 36.0) * (48.0 / 36.0);
-
-  config.identity = {"1690X", "1690X", "1690X SAMPLE", "commission", 0,
-                     3, 0};
-  config.hardware.left = {{
-      motorFromReversedFlag(3, 600, true,
-                            kRatio6MotorRevPerWheelRev),   // Front: reverse
-      motorFromReversedFlag(2, 200, true,
-                            kRatio18MotorRevPerWheelRev),  // Middle: reverse
-      motorFromReversedFlag(1, 600, false,
-                            kRatio6MotorRevPerWheelRev),   // Rear: forward
-  }};
-  config.hardware.right = {{
-      motorFromReversedFlag(13, 600, false,
-                            kRatio6MotorRevPerWheelRev),   // Front: forward
-      motorFromReversedFlag(12, 200, false,
-                            kRatio18MotorRevPerWheelRev),  // Middle: forward
-      motorFromReversedFlag(11, 600, true,
-                            kRatio6MotorRevPerWheelRev),   // Rear: reverse
-  }};
-  config.hardware.lift = {
-      true,
-      {{motorFromReversedFlag(14, 200, true),
-        motorFromReversedFlag(5, 200, false)}},
-      0.0,
-      units::degreesToRadians(830.0)};
-  config.hardware.imu = {false, 0};
-  config.geometry = {0.06985, 0.1524};
-  // CAD/nominal values are not promoted to fitted odometry calibration.
-  config.calibration = {};
-  // Operator-authorized full-voltage commissioning ceiling. This is the V5
-  // command limit; input/output slew and all commissioning safety gates remain.
-  config.electrical.max_command_voltage_V = 12.0;
-  config.hardware_verification = VerificationLevel::Implemented;
-  config.selected_route = RouteIds::kDoNothing;
-  return config;
-}
-
-// Kept as a compatibility entry point for existing callers. It now returns
-// the identified, capability-locked 1690X commissioning profile.
-inline RobotConfig makeOfflineRobotConfig() {
-  return make1690XCommissioningConfig();
 }
 
 }  // namespace robot

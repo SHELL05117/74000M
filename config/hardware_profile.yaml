@@ -1,126 +1,17 @@
-# Commissioning hardware manifest for the 1690X sample chassis.
+# Robot hardware profile registry.
 #
-# Ports, cartridges, direction flags, drive-wheel size, nominal track width and
-# tooth paths were supplied by the operator. Calibration fields remain null.
-# Position, port, cartridge and direction assignments were supplied by the
-# operator on 2026-07-21. "reverse" is stored as reversed=true and "forward"
-# as reversed=false. The new mapping requires an airborne per-port direction
-# test. Official capabilities remain locked while verification.hardware is not
-# HILValidated or better.
+# ROBOT_PROFILE is selected at compile time. Identity and Smart Ports are
+# selected together; do not copy ports between profiles at runtime.
 
-identity:
-  schema_version: 3
-  calibration_revision: 0
-  team_number: "1690X"
-  robot_id: "1690X"
-  hardware_revision: null
-  wheel_and_gearing: "2.75in wheel; mixed 6:1 and 18:1 cartridges; nominal 450 wheel rpm"
+schema_version: 1
+default_build_profile: "492Z"
+profiles:
+  "492X": "config/robots/492X.yaml"
+  "492Z": "config/robots/492Z.yaml"
 
-platform:
-  framework: "PROS"
-  kernel_version: "4.2.2"
-  language_standard: "C++17"
-  nominal_control_period_ms: 10
-
-coordinate_contract:
-  body_x_positive: "forward"
-  body_y_positive: "left"
-  theta_positive: "counter_clockwise_from_above"
-  linear_unit: "metre"
-  angular_unit: "radian"
-  time_interval_unit: "second"
-  voltage_unit: "volt"
-
-hardware:
-  left_drive:
-    - { position: front,  smart_port: 3, reversed: true,  cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # 6:1; 36T -> 48T
-    - { position: middle, smart_port: 2, reversed: true,  cartridge_rpm: 200, motor_rev_per_wheel_rev: 0.4444444444444444 } # 18:1; 36T -> 12T, coaxial 36T -> 48T
-    - { position: rear,   smart_port: 1, reversed: false, cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # 6:1; 36T -> 48T
-  right_drive:
-    - { position: front,  smart_port: 13, reversed: false, cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # 6:1; 36T -> 48T
-    - { position: middle, smart_port: 12, reversed: false, cartridge_rpm: 200, motor_rev_per_wheel_rev: 0.4444444444444444 } # 18:1; 36T -> 12T, coaxial 36T -> 48T
-    - { position: rear,   smart_port: 11, reversed: true,  cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # 6:1; 36T -> 48T
-  lift:
-    installed: true
-    startup_reference: "operator places mechanism at physical lower stop; both integrated encoders tare to 0 deg during initialization"
-    travel_motor_deg: { minimum: 0.0, physical_maximum: 830.0, software_command_ceiling: 820.0 }
-    motors:
-      - { side: left,  smart_port: 14, reversed: true,  cartridge_rpm: 200 }
-      - { side: right, smart_port: 5,  reversed: false, cartridge_rpm: 200 }
-  imu:
-    installed: false
-    smart_port: null
-    mounting: "not installed"
-  parallel_rotation:
-    installed: false
-    smart_port: null
-    reversed: null
-    offset_y_m: null
-  lateral_rotation:
-    installed: false
-    smart_port: null
-    reversed: null
-    offset_x_m: null
-
-geometry:
-  nominal_drive_wheel_diameter_m: 0.06985 # supplied 2.75 in
-  nominal_track_width_m: 0.1524          # supplied SolidWorks 6 in
-  source: "operator/CAD; not field calibrated"
-
-calibration:
-  left_m_per_motor_rad: null
-  right_m_per_motor_rad: null
-  effective_track_width_m: null
-
-verification:
-  implementation: "Implemented"
-  pc: "PCValidated"
-  simulation: "NotTested"
-  hardware: "Unverified"
-  field: "Unverified"
-  competition: "Unverified"
-  last_direction_observation: "2026-07-21 operator remap is recorded; per-port airborne direction test pending"
-
-capabilities:
-  hardware_output: false
-  driver_control: false
-  pose_good: false
-  autonomous_chassis_velocity: false
-  autonomous_motion: false
-  competition_routes: false
-  selected_route: "DoNothing"
-
-commissioning_test:
-  enabled_in_non_field_opcontrol: true
-  tuning_revision: 5
-  maximum_voltage_V: 12.0
-  controller_mapping: "Left Y throttle; Left X curvature; Right Y (Axis2) Lift up/down"
-  throttle_cubic_weight: 0.0
-  turn_cubic_weight: 0.15
-  curvature_gain: 1.0
-  quick_turn_gain: 1.0
-  quick_turn_trigger: "automatic while Left X is nonzero and throttle is within the hysteresis gate"
-  quick_turn_enter_throttle: 0.15
-  quick_turn_exit_throttle: 0.25
-  arming: "none; drive is active immediately in non-field opcontrol"
-  coast_button: "Controller Left rising edge; emit one global Coast event for one control frame; holding does not retrigger"
-  zero_behavior: "Coast for neutral, the one-frame Left event, disabled, disconnect, request stale, and output stale"
-  recording_button: "Y; release after >=3.0 s requests Start, release after >=1.0 s while Recording requests Stop"
-  recording_storage: "V5 Brain microSD/TF at /usd/FLIGHT/<robot>/R<storage-sequence>_T<boot-ms>/DATA.V5L"
-  recording_failure_alert: "Refuse/abort recording and issue three short Controller rumble pulses"
-  throttle_rise_per_s: 100.0
-  throttle_fall_per_s: 100.0
-  turn_rise_per_s: 100.0
-  turn_fall_per_s: 100.0
-  output_rise_V_per_s: 1200.0
-  output_fall_V_per_s: 1200.0
-  nominal_full_scale_ramp_s: 0.01
-  tuning_status: "Linear throttle and one-frame full-scale response are aggressive HIL candidates; retest required"
-  lift_axis_deadband: 0.06
-  lift_axis_cubic_weight: 0.0
-  lift_maximum_voltage_V: 12.0
-  lift_upper_guard_deg: 10.0
-  lift_slowdown_zone_deg: 90.0
-  lift_maximum_encoder_disagreement_deg: 25.0
-  lift_neutral_and_fault_behavior: "Hold"
-  lift_tuning_status: "Port/polarity/travel supplied by operator; zeroing assumption, endpoint margin, slowdown and disagreement thresholds require HIL validation"
+shared_configuration:
+  drivetrain_direction_gearing: true
+  lift_direction_gearing_travel: true
+  geometry: true
+  control_and_safety_parameters: true
+  sensors_installed: false

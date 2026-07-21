@@ -17,7 +17,7 @@
   -> 下一控制周期
 ```
 
-端到端测试使用合成、明确标注的底盘常数，验证接口、方向、TTL、owner、epoch、饱和和闭环收敛；这些常数不写入 `hardware_profile.yaml`，也不能替代真机参数。
+端到端测试使用合成、明确标注的底盘常数，验证接口、方向、TTL、owner、epoch、饱和和闭环收敛；这些常数不写入 `config/robots/*.yaml`，也不能替代真机参数。
 
 ## 发布矩阵
 
@@ -44,7 +44,7 @@
 .\tools\validate_offline_release.ps1
 ```
 
-脚本依次执行 CMake/CTest、完整测试程序、离线冻结审计和 PROS 构建，并在 `build/offline_release_evidence.json` 记录：commit、`hardware_profile.yaml` SHA-256、robot ID、calibration revision、测试摘要、未测试项和回滚 commit。`build/` 是本地证据目录，不作为批准材料提交；上机后应把原始日志、manifest、分析结果和签字批准复制到受版本控制的发布包。
+脚本依次执行 CMake/CTest、完整测试程序、离线冻结审计和 PROS 构建，并在 `build/offline_release_evidence.json` 记录：commit、两份 `config/robots/*.yaml` 的 SHA-256、robot ID、calibration revision、测试摘要、未测试项和回滚 commit。`build/` 是本地证据目录，不作为批准材料提交；上机后应把原始日志、manifest、分析结果和签字批准复制到受版本控制的发布包。
 
 当前回滚基线为自动安全板块之前的 `a9b97ef`，各中间板块也有独立 Git commit。机器完成后的参数、调试顺序和逐级 capability 解锁严格按 `docs/HARDWARE_COMMISSIONING.md`；HMI/SD 另见 `docs/HMI_OFFLINE_VALIDATION.md`。
 

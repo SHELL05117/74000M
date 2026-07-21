@@ -39,4 +39,4 @@
 | HMI 任务耗时和队列压力 | p50/p95/p99、最大值、high-watermark、drop/reject | 未测试 | 不得提高显示刷新率或队列负载 |
 | 参数应用后的控制器 reset/next-enable/reboot 语义 | 每个 ApplyPolicy 的状态与输出日志 | 未测试 | 参数只保持 Draft/Bench 候选 |
 
-所有对应能力继续由 `config/hardware_profile.yaml` 的 capability 锁控制。详细上机顺序、记录字段和停止条件见 `docs/HARDWARE_COMMISSIONING.md`；不得用预设数据把上述“未测试”改写为通过。
+所有对应能力继续由 `config/robots/492X.yaml` 与 `config/robots/492Z.yaml` 各自的 capability 锁控制。详细上机顺序、记录字段和停止条件见 `docs/HARDWARE_COMMISSIONING.md`；不得用预设数据把上述“未测试”改写为通过。

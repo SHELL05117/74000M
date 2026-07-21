@@ -5,6 +5,7 @@
 
 #include "robot/commands/drive_request_arbiter.hpp"
 #include "robot/commands/request_sink.hpp"
+#include "robot/config/robot_profiles.hpp"
 #include "robot/drive/safety_gate.hpp"
 #include "robot/lift/lift_control.hpp"
 #include "robot/manual/input_shaping.hpp"
@@ -36,12 +37,11 @@ struct CommissioningCurvatureConfig {
   OutputSlewConfig output_slew{};
 };
 
-inline CommissioningCurvatureConfig
-make1690XCommissioningCurvatureConfig() {
+inline CommissioningCurvatureConfig makeCommissioningCurvatureConfig() {
   CommissioningCurvatureConfig config{};
-  // Match the original 1690X driver's linear throttle response while keeping
-  // a remapped neutral deadband. Turn retains mild cubic shaping because
-  // Curvature already provides the requested high-speed steering semantics.
+  // Both robots share the same linear throttle response and remapped neutral
+  // deadband. Turn retains mild cubic shaping because Curvature already
+  // provides the requested high-speed steering semantics.
   config.throttle_shape = {0.0, 0.06, 0.0};
   config.turn_shape = {0.0, 0.06, 0.15};
   config.throttle_rise_per_s = 100.0;
@@ -315,9 +315,9 @@ class CommissioningControlCycle final : public ControlCycle {
   explicit CommissioningControlCycle(
       CommissioningCurvatureConfig config,
       LiftCommissioningConfig lift_config =
-          make1690XLiftCommissioningConfig(),
+          makeLiftCommissioningConfig(),
       LiftHardwareConfig lift_hardware =
-          make1690XCommissioningConfig().hardware.lift)
+          makeSelectedRobotConfig().hardware.lift)
       : config_(config),
         mapper_(config),
         arbiter_({config.request_ttl_us}),

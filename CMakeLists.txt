@@ -6,10 +6,17 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+set(ROBOT_PROFILE "492Z" CACHE STRING "Robot hardware profile: 492X or 492Z")
+set_property(CACHE ROBOT_PROFILE PROPERTY STRINGS 492X 492Z)
+if(NOT ROBOT_PROFILE STREQUAL "492X" AND NOT ROBOT_PROFILE STREQUAL "492Z")
+    message(FATAL_ERROR "ROBOT_PROFILE must be 492X or 492Z")
+endif()
+
 add_library(robot_core STATIC
     src/robot.cpp
 )
 target_include_directories(robot_core PUBLIC include)
+target_compile_definitions(robot_core PUBLIC ROBOT_PROFILE_${ROBOT_PROFILE}=1)
 
 if(MSVC)
     target_compile_options(robot_core PRIVATE /W4 /permissive-)

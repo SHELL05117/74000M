@@ -32,7 +32,7 @@ struct LiftCommissioningConfig {
   double maximum_disagreement_rad{};
 };
 
-inline LiftCommissioningConfig make1690XLiftCommissioningConfig() noexcept {
+inline LiftCommissioningConfig makeLiftCommissioningConfig() noexcept {
   LiftCommissioningConfig config{};
   // Axis2 is proportional after a remapped neutral deadband. There is no
   // cubic component, so stick travel remains approximately linear.

@@ -36,7 +36,7 @@ robot::TimingSample timingFor(const robot::FrameHeader& header) {
 }
 
 robot::CommissioningCurvatureConfig directMappingConfig() {
-  auto config = robot::make1690XCommissioningCurvatureConfig();
+  auto config = robot::makeCommissioningCurvatureConfig();
   config.throttle_shape = {0.0, 0.0, 0.0};
   config.turn_shape = {0.0, 0.0, 0.0};
   config.throttle_rise_per_s = 1000.0;
@@ -49,14 +49,14 @@ robot::CommissioningCurvatureConfig directMappingConfig() {
 }  // namespace
 
 ROBOT_TEST("commissioning Curvature requires ordered automatic turn gates") {
-  auto config = robot::make1690XCommissioningCurvatureConfig();
+  auto config = robot::makeCommissioningCurvatureConfig();
   ROBOT_REQUIRE(robot::validCommissioningCurvatureConfig(config));
   config.quick_turn_exit_throttle = config.quick_turn_enter_throttle;
   ROBOT_REQUIRE(!robot::validCommissioningCurvatureConfig(config));
 }
 
 ROBOT_TEST("commissioning Curvature drives immediately and neutral coasts") {
-  const auto config = robot::make1690XCommissioningCurvatureConfig();
+  const auto config = robot::makeCommissioningCurvatureConfig();
   robot::CommissioningCurvatureMapper mapper(config);
   const robot::OwnerToken owner{42, robot::Requirement::kDrivetrain, 3, 7};
   const auto mode = testMode();
@@ -223,7 +223,7 @@ ROBOT_TEST("commissioning Curvature keeps wheel ratio when saturated") {
 }
 
 ROBOT_TEST("commissioning cycle drives through Test safety gate at twelve volts") {
-  const auto config = robot::make1690XCommissioningCurvatureConfig();
+  const auto config = robot::makeCommissioningCurvatureConfig();
   ROBOT_REQUIRE_NEAR(config.max_voltage_V, 12.0, 1e-12);
   ROBOT_REQUIRE_NEAR(config.throttle_shape.cubic_weight, 0.0, 1e-12);
   ROBOT_REQUIRE_NEAR(config.turn_shape.cubic_weight, 0.15, 1e-12);
@@ -291,7 +291,7 @@ ROBOT_TEST("commissioning log preserves mapping arbitration and final intent") {
 }
 
 ROBOT_TEST("linear throttle preserves near-endpoint voltage") {
-  const auto config = robot::make1690XCommissioningCurvatureConfig();
+  const auto config = robot::makeCommissioningCurvatureConfig();
   robot::CommissioningCurvatureMapper mapper(config);
   const robot::OwnerToken owner{42, robot::Requirement::kDrivetrain, 3, 7};
   const auto mode = testMode();
@@ -313,7 +313,7 @@ ROBOT_TEST("linear throttle preserves near-endpoint voltage") {
 }
 
 ROBOT_TEST("automatic Quick Turn reaches full voltage in one nominal frame") {
-  const auto config = robot::make1690XCommissioningCurvatureConfig();
+  const auto config = robot::makeCommissioningCurvatureConfig();
   robot::CommissioningControlCycle cycle(config);
   const auto mode = testMode();
   robot::RawDriveInputs raw{};
@@ -328,7 +328,7 @@ ROBOT_TEST("automatic Quick Turn reaches full voltage in one nominal frame") {
 }
 
 ROBOT_TEST("Left produces one Coast frame and held Left does not latch") {
-  const auto config = robot::make1690XCommissioningCurvatureConfig();
+  const auto config = robot::makeCommissioningCurvatureConfig();
   robot::CommissioningControlCycle cycle(config);
   robot::RawDriveInputs raw{};
   const auto mode = testMode();
@@ -443,7 +443,7 @@ ROBOT_TEST("global Left detector emits once and requires release after invalid i
 }
 
 ROBOT_TEST("commissioning output watchdog uses Coast for stale frames") {
-  const auto robot_config = robot::make1690XCommissioningConfig();
+  const auto robot_config = robot::makeSelectedRobotConfig();
   robot::FakeDriveIO io(robot_config.hardware, {1.0, 12.0});
   ROBOT_REQUIRE(io.initialize());
   robot::OutputService output(

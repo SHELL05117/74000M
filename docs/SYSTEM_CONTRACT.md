@@ -1,7 +1,7 @@
 # 74000M 离线系统契约
 
 本文件冻结可以在无真机阶段确认的系统边界。硬件参数的权威预留表位于
-`config/hardware_profile.yaml`；真机到位后的填写、调试和能力解锁步骤位于
+`config/hardware_profile.yaml` 索引及 `config/robots/*.yaml`；真机到位后的填写、调试和能力解锁步骤位于
 `docs/HARDWARE_COMMISSIONING.md`。
 
 ## 平台与范围

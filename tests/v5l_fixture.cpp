@@ -1,4 +1,4 @@
-#include "robot/config/robot_config.hpp"
+#include "robot/config/robot_profiles.hpp"
 #include "robot/telemetry/recording_codec.hpp"
 
 #include <cstddef>
@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
   if (!writer.valid()) return 2;
 
   const robot::RobotConfig config =
-      robot::make1690XCommissioningConfig();
+      robot::makeSelectedRobotConfig();
   const robot::RecordingMetadata metadata =
       robot::makeRecordingMetadata(
           config, 0x1122334455667788ull,

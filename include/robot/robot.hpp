@@ -6,6 +6,7 @@
 #include "robot/autonomy/trajectory.hpp"
 #include "robot/autonomy/trajectory_tracker.hpp"
 #include "robot/config/robot_config.hpp"
+#include "robot/config/robot_profiles.hpp"
 #include "robot/control/chassis_velocity_controller.hpp"
 #include "robot/control/engineering_pid.hpp"
 #include "robot/control/feedforward.hpp"

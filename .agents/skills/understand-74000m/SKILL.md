@@ -9,7 +9,7 @@ Read this file completely before working in the repository. Then follow the stri
 
 ## Project snapshot
 
-- Target: VEX V5 differential-drive robot, current sample identity `1690X`.
+- Target: two VEX V5 differential-drive robots sharing one core: `492X` and `492Z`.
 - Runtime: PROS kernel, C++17, ARM firmware built with the PROS Makefiles.
 - Host validation: CMake 3.20+ and CTest on Windows or another desktop C++17 compiler.
 - Current chassis: six motors, three per side, mixed 600 RPM and 200 RPM cartridges with external gearing normalized to the same nominal wheel speed.
@@ -17,7 +17,7 @@ Read this file completely before working in the repository. Then follow the stri
 - All formal `RobotCapabilities` are false. The only output exception is the narrow `CommissioningControlCycle`, which enables `controlled_test_voltage` locally only in non-field `Test` mode and still uses the scheduler, arbiter, safety gate, TTLs, and sole output service.
 - Driver test: left-stick single-stick Curvature with linear throttle, automatic low-throttle Quick Turn, a 12 V command ceiling, aggressive one-nominal-frame (10 ms) full-scale Slew candidates, Coast stops, and hold `B` to force Coast.
 - Startup: at least three seconds of self-check. The current profile intentionally declares no IMU, so every boot is expected to finish with a sensor warning, request three Controller rumble pulses, and display `X/Y/H:ERR`; any other unhealthy configured-device check uses the same warning event.
-- Source of current hardware truth: `include/robot/config/robot_config.hpp` plus the traceable manifest `config/hardware_profile.yaml`. The YAML is not loaded at runtime.
+- Source of current hardware truth: common types/validation in `include/robot/config/robot_config.hpp`, executable profiles and compile-time selection in `include/robot/config/robot_profiles.hpp`, and traceable manifests in `config/robots/492X.yaml` and `config/robots/492Z.yaml`. `config/hardware_profile.yaml` is the profile index. YAML is not loaded at runtime.
 
 Re-read the current config and `src/main.cpp` before reporting hardware or capability status; this snapshot can become stale after later commits.
 
@@ -67,7 +67,7 @@ Key ownership rules:
 
 | Path | Responsibility |
 |---|---|
-| `src/main.cpp` | PROS lifecycle, task creation, startup self-check, current 1690X composition |
+| `src/main.cpp` | PROS lifecycle, task creation, startup self-check, and build-selected 492X/492Z composition |
 | `src/platform/pros_adapters.cpp` | The physical PROS boundary and device/unit conversions |
 | `src/robot.cpp` | Small host-linkable library translation unit |
 | `include/robot/robot.hpp` | Public umbrella header |
@@ -78,7 +78,7 @@ Key ownership rules:
 | `include/robot/sensors/` | Validation, filtering, port-level fault isolation |
 | `include/robot/drive/` | Request/output types, kinematics, allocation, Slew, safety gate, unique output service |
 | `include/robot/runtime/` | Mode lifecycle, control/output loops, timing, cross-task mailboxes |
-| `include/robot/manual/` | Input shaping, manual drive, heading assist, 1690X commissioning Curvature cycle |
+| `include/robot/manual/` | Input shaping, manual drive, heading assist, shared commissioning Curvature cycle |
 | `include/robot/commands/` | Static command scheduler, requirements, leases, request sink, command groups |
 | `include/robot/control/` | PID, feedforward, motion profiles, termination, chassis velocity controller |
 | `include/robot/odometry/` | IMU-first drive/tracking-wheel pose estimation |
@@ -89,7 +89,7 @@ Key ownership rules:
 | `include/robot/hmi/` | HMI model/events, rendering, edit leases, transactions, selection, persistence |
 | `include/robot/ui/` | Stable route and parameter IDs |
 | `tests/` | PC unit tests, Fake IO, fault injection, replay, and full-chain offline tests |
-| `config/` | Human-readable hardware manifest; not a runtime parser input |
+| `config/` | Dual-profile index and per-robot human-readable manifests; not runtime parser inputs |
 | `docs/` | Local implementation, commissioning, validation, and release evidence |
 | `.agents/skills/` | Mandatory project skills |
 | `build/`, `bin/` | Generated PC and firmware outputs; do not hand-edit or commit unless explicitly tracked |
@@ -100,7 +100,7 @@ Use `include/robot/commands/`; the empty legacy `include/robot/command/` directo
 
 Configuration and hardware:
 
-- `make1690XCommissioningConfig()` creates the current locked sample configuration.
+- `make492XRobotConfig()` and `make492ZRobotConfig()` create the two locked hardware profiles; `makeSelectedRobotConfig()` and `selectedRobotId()` bind the compile-time profile to identity and ports atomically.
 - `validateConfig()` checks identity, schema, ports, geometry, transmission, runtime values, voltage, routes, and capability dependencies.
 - `DriveIO`, `ControllerIO`, `ControllerDisplayIO`, `CompetitionIO`, and `Clock` define platform boundaries.
 - `ProsDriveIO` is the V5 implementation; `FakeDriveIO` is the deterministic PC implementation.
@@ -152,7 +152,7 @@ Never add a second drivetrain writer, call motor APIs from commands/HMI, create 
 Run the complete host suite from the project root:
 
 ```powershell
-cmake -S . -B build/pc -DBUILD_TESTING=ON
+cmake -S . -B build/pc -DBUILD_TESTING=ON -DROBOT_PROFILE=492Z
 cmake --build build/pc --config Release --parallel
 ctest --test-dir build/pc -C Release --output-on-failure
 ```
@@ -166,8 +166,14 @@ Add a new test source to `CMakeLists.txt`. Use `ROBOT_TEST`, `ROBOT_REQUIRE`, an
 With the PROS toolchain on `PATH`:
 
 ```powershell
-make
+make clean
+make ROBOT_PROFILE=492Z
 ```
+
+Use `ROBOT_PROFILE=492X` for 492X. Always clean before switching profiles so
+objects compiled for the other port map cannot be reused. The accepted values
+are enforced by both CMake and the PROS Makefile; the repository default is
+`492Z`.
 
 If `make` is not on `PATH`, locate the installed PROS extension toolchain and prepend its `usr/bin` directory. One known local location is under `%APPDATA%\Windsurf\User\globalStorage\sigbots.pros\install\pros-toolchain-windows\usr\bin`; do not hard-code it without checking the current machine.
 

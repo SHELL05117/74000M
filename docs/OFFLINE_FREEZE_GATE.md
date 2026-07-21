@@ -29,7 +29,7 @@
 | 日志重放 | schema、CRC、ring 压力、replay 测试 | 离线完整性与确定性通过 |
 | 语言与平台隔离 | PC MSVC C++17、PROS GNU++17 构建 | 通过 |
 
-全套 PC 测试和 PROS 构建必须与本报告同一提交重新执行。`config/hardware_profile.yaml` 只把 PC 状态提升为 `PCValidated`；所有硬件/驾驶/定位/自动/路线 capability 仍为 `false`，路线仍为 `DoNothing`。
+全套 PC 测试和 PROS 构建必须与本报告同一提交重新执行。`config/robots/492X.yaml` 与 `config/robots/492Z.yaml` 只把 PC 状态提升为 `PCValidated`；所有硬件/驾驶/定位/自动/路线 capability 仍为 `false`，路线仍为 `DoNothing`。
 
 ## 未通过的真机硬门
 

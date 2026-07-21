@@ -2,6 +2,7 @@
 #include "pros/rtos.h"
 
 #include "robot/config/robot_config.hpp"
+#include "robot/config/robot_profiles.hpp"
 #include "robot/core/snapshot_box.hpp"
 #include "robot/drive/output_service.hpp"
 #include "robot/hmi/render_models.hpp"
@@ -27,8 +28,6 @@
 
 namespace {
 
-constexpr char kExpectedRobotId[] = "1690X";
-constexpr std::uint32_t kExpectedConfigSchema = 3;
 constexpr std::uint32_t kStartupSelfCheckPollMs = 10;
 constexpr std::uint32_t kControllerHmiPeriodMs = 100;
 constexpr std::uint32_t kTelemetryPeriodMs = 5;
@@ -48,14 +47,14 @@ class ProsMutex {
 class RobotRuntime {
  public:
   RobotRuntime()
-      : config_(robot::make1690XCommissioningConfig()),
-        drive_(config_, kExpectedRobotId, kExpectedConfigSchema),
+      : config_(robot::makeSelectedRobotConfig()),
+        drive_(config_, robot::selectedRobotId(), robot::kRobotConfigSchema),
         modes_(mode_store_),
         timing_({config_.runtime.nominal_period_s,
                  config_.runtime.min_math_dt_s,
                  config_.runtime.max_math_dt_s, 0.015}),
-        cycle_(robot::make1690XCommissioningCurvatureConfig(),
-               robot::make1690XLiftCommissioningConfig(),
+        cycle_(robot::makeCommissioningCurvatureConfig(),
+               robot::makeLiftCommissioningConfig(),
                config_.hardware.lift),
         recording_metadata_(robot::makeRecordingMetadata(
             config_, clock_.nowUs(), ROBOT_SOURCE_COMMIT,
@@ -85,7 +84,7 @@ class RobotRuntime {
 
   bool initializeHardware() {
     const robot::ConfigCheck check = robot::validateConfig(
-        config_, kExpectedRobotId, kExpectedConfigSchema);
+        config_, robot::selectedRobotId(), robot::kRobotConfigSchema);
     config_valid_ = check.structurally_valid;
     hardware_initialized_ = config_valid_ && drive_.initialize();
     return hardware_initialized_;
@@ -222,7 +221,7 @@ void telemetryTaskEntry(void* parameter) {
 
 extern "C" void initialize() {
   pros::lcd::initialize();
-  pros::lcd::set_text(0, "1690X 6-MOTOR SAMPLE");
+  pros::lcd::set_text(0, robot::selectedRobotId());
   pros::lcd::set_text(1, "COMMISSIONING: 12V MAX");
   pros::lcd::set_text(2, "NO IMU / AUTO LOCKED");
 

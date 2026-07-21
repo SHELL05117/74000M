@@ -51,19 +51,22 @@ try {
         }
     }
 
-    $profile = Get-Content -Raw -Encoding utf8 "config/hardware_profile.yaml"
-    foreach ($capability in @("hardware_output", "driver_control", "pose_good",
-                              "autonomous_chassis_velocity", "autonomous_motion",
-                              "competition_routes")) {
-        if ($profile -notmatch "(?m)^\s*$capability\s*:\s*false\s*$") {
-            $failures.Add("offline capability is not locked: $capability")
+    foreach ($profilePath in @("config/robots/492X.yaml",
+                               "config/robots/492Z.yaml")) {
+        $profile = Get-Content -Raw -Encoding utf8 $profilePath
+        foreach ($capability in @("hardware_output", "driver_control", "pose_good",
+                                  "autonomous_chassis_velocity", "autonomous_motion",
+                                  "competition_routes")) {
+            if ($profile -notmatch "(?m)^\s*$capability\s*:\s*false\s*$") {
+                $failures.Add("offline capability is not locked in ${profilePath}: $capability")
+            }
         }
-    }
-    if ($profile -notmatch '(?m)^\s*selected_route\s*:\s*"DoNothing"\s*$') {
-        $failures.Add("offline selected route is not DoNothing")
-    }
-    if ($profile -notmatch '(?m)^\s*hardware\s*:\s*"Unverified"\s*$') {
-        $failures.Add("hardware verification was changed without HIL evidence")
+        if ($profile -notmatch '(?m)^\s*selected_route\s*:\s*"DoNothing"\s*$') {
+            $failures.Add("offline selected route is not DoNothing in $profilePath")
+        }
+        if ($profile -notmatch '(?m)^\s*hardware\s*:\s*"Unverified"\s*$') {
+            $failures.Add("hardware verification changed without HIL evidence in $profilePath")
+        }
     }
     if ((Get-Content -Raw "CMakeLists.txt") -notmatch 'CMAKE_CXX_STANDARD 17' -or
         (Get-Content -Raw "Makefile") -notmatch 'CXX_STANDARD:=gnu\+\+17') {
@@ -85,6 +88,6 @@ Write-Output "motor writer: src/platform/pros_adapters.cpp only"
 Write-Output "business output path: OutputService only"
 Write-Output "core platform isolation: PASS"
 Write-Output "battery amplification guard: PASS"
-Write-Output "offline capabilities and DoNothing lock: PASS"
+Write-Output "492X/492Z capabilities and DoNothing locks: PASS"
 Write-Output "language standard: PC/PROS C++17"
 exit 0

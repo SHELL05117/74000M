@@ -47,8 +47,8 @@ robot::TimingSample timingAt(const robot::FrameHeader& header) {
 }  // namespace
 
 ROBOT_TEST("Lift Axis2 mapping is proportional after the neutral deadband") {
-  const auto robot_config = robot::make1690XCommissioningConfig();
-  const auto lift_config = robot::make1690XLiftCommissioningConfig();
+  const auto robot_config = robot::makeSelectedRobotConfig();
+  const auto lift_config = robot::makeLiftCommissioningConfig();
   robot::LiftManualMapper mapper(lift_config, robot_config.hardware.lift);
   const robot::OwnerToken owner{
       42, robot::Requirement::kDrivetrain | robot::Requirement::kLift, 1, 4};
@@ -68,8 +68,8 @@ ROBOT_TEST("Lift Axis2 mapping is proportional after the neutral deadband") {
 }
 
 ROBOT_TEST("Lift gate slows before the endpoint and blocks both hard limits") {
-  const auto robot_config = robot::make1690XCommissioningConfig();
-  const auto lift_config = robot::make1690XLiftCommissioningConfig();
+  const auto robot_config = robot::makeSelectedRobotConfig();
+  const auto lift_config = robot::makeLiftCommissioningConfig();
   const auto& hardware = robot_config.hardware.lift;
   robot::LiftSafetyGate gate(lift_config, hardware);
   const robot::OwnerToken owner{
@@ -100,8 +100,8 @@ ROBOT_TEST("Lift gate slows before the endpoint and blocks both hard limits") {
 }
 
 ROBOT_TEST("Lift gate holds on encoder disagreement or stale position") {
-  const auto robot_config = robot::make1690XCommissioningConfig();
-  const auto lift_config = robot::make1690XLiftCommissioningConfig();
+  const auto robot_config = robot::makeSelectedRobotConfig();
+  const auto lift_config = robot::makeLiftCommissioningConfig();
   const auto& hardware = robot_config.hardware.lift;
   robot::LiftSafetyGate gate(lift_config, hardware);
   const robot::OwnerToken owner{
@@ -122,10 +122,10 @@ ROBOT_TEST("Lift gate holds on encoder disagreement or stale position") {
 }
 
 ROBOT_TEST("commissioning cycle and single output writer carry Lift voltage") {
-  const auto robot_config = robot::make1690XCommissioningConfig();
-  const auto lift_config = robot::make1690XLiftCommissioningConfig();
+  const auto robot_config = robot::makeSelectedRobotConfig();
+  const auto lift_config = robot::makeLiftCommissioningConfig();
   robot::CommissioningControlCycle cycle(
-      robot::make1690XCommissioningCurvatureConfig(), lift_config,
+      robot::makeCommissioningCurvatureConfig(), lift_config,
       robot_config.hardware.lift);
   const robot::FrameHeader header{10000, 1, 4};
   robot::RawDriveInputs raw{};
