@@ -24,8 +24,21 @@ from .models import DatasetRole, SessionMetadata
 from .reports.llm import ReportGenerator
 from .repository import Repository
 from .storage.archive import ImportService, scan_recordings
-from .ui_style import MUTED, PAPER, RULE, SWISS_GRID_STYLE, VEX_RED
-from .version import __version__
+from .ui_style import (
+    ACCENT,
+    BAD,
+    IDLE,
+    LINE,
+    LINE_SOFT,
+    OK,
+    PLOT_BACKGROUND,
+    PLOT_GRID_ALPHA,
+    TEXT_DIM,
+    TEXT_FAINT,
+    WARN,
+    application_stylesheet,
+)
+from .version import ANALYSIS_VERSION, __version__
 
 
 if QtCore is not None:
@@ -86,6 +99,31 @@ if QtCore is not None:
         "FAIL": "失败",
         "NOT TESTED": "未测试",
     }
+    # 语义色映射：CONDITIONAL PASS 绝不渲染成 OK；FAIL/REPEAT/NOT TESTED 不隐藏。
+    VERDICT_COLORS = {
+        "PASS": OK,
+        "CONDITIONAL PASS": WARN,
+        "REPEAT": BAD,
+        "FAIL": BAD,
+        "NOT TESTED": IDLE,
+    }
+    VERDICT_STATES = {
+        "PASS": "ok",
+        "CONDITIONAL PASS": "warn",
+        "REPEAT": "bad",
+        "FAIL": "bad",
+    }
+    SEVERITY_COLORS = {
+        "info": IDLE,
+        "warning": WARN,
+        "error": BAD,
+    }
+    METRIC_STATE_COLORS = {
+        "ok": OK,
+        "warn": WARN,
+        "bad": BAD,
+        "idle": IDLE,
+    }
 
 
     def _error(parent, message: str) -> None:
@@ -101,25 +139,83 @@ if QtCore is not None:
         return button
 
 
+    def _quiet(button: QtWidgets.QPushButton) -> QtWidgets.QPushButton:
+        button.setProperty("role", "quiet")
+        return button
+
+
+    def _semantic_color(status_value: str) -> str:
+        return VERDICT_COLORS.get(status_value, IDLE)
+
+
+    def _verdict_state(status_value: str) -> str:
+        return VERDICT_STATES.get(status_value, "idle")
+
+
+    def _severity_color(severity: str) -> str:
+        return SEVERITY_COLORS.get(severity, IDLE)
+
+
+    def _kicker_label(text: str, object_name: str = "kicker") -> QtWidgets.QLabel:
+        label = QtWidgets.QLabel(text)
+        label.setObjectName(object_name)
+        font = label.font()
+        font.setLetterSpacing(QtGui.QFont.SpacingType.AbsoluteSpacing, 2.0)
+        label.setFont(font)
+        return label
+
+
+    def _form_label(text: str) -> QtWidgets.QWidget:
+        """表单标签容器：必填星号用 ACCENT 色（双 QLabel，确定性渲染）。"""
+        container = QtWidgets.QWidget()
+        row = QtWidgets.QHBoxLayout(container)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(2)
+        required = text.endswith("*")
+        base_text = text[:-1].rstrip() if required else text
+        base = QtWidgets.QLabel(base_text)
+        base.setObjectName("formLabel")
+        row.addWidget(base)
+        if required:
+            star = QtWidgets.QLabel("*")
+            star.setObjectName("formLabel")
+            star.setStyleSheet(f"color: {ACCENT};")
+            row.addWidget(star)
+        row.addStretch()
+        return container
+
+
+    def _faint_label(text: str = "") -> QtWidgets.QLabel:
+        label = QtWidgets.QLabel(text)
+        label.setStyleSheet(f"color: {TEXT_FAINT}; font-size: 11px;")
+        return label
+
+
     def _page_layout(
-        page: QtWidgets.QWidget, title_text: str, description: str
+        page: QtWidgets.QWidget,
+        title_text: str,
+        description: str,
+        embedded: bool = False,
     ) -> QtWidgets.QVBoxLayout:
+        """页面骨架；embedded=True 时省略页内大标题与分隔线（用于结果中心 tab）。"""
         page.setObjectName("page")
         layout = QtWidgets.QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
-        title = QtWidgets.QLabel(title_text)
-        title.setObjectName("pageTitle")
-        layout.addWidget(title)
+        if not embedded:
+            title = QtWidgets.QLabel(title_text)
+            title.setObjectName("pageTitle")
+            layout.addWidget(title)
         if description:
             hint = QtWidgets.QLabel(description)
             hint.setObjectName("pageDescription")
             hint.setWordWrap(True)
             layout.addWidget(hint)
-        rule = QtWidgets.QFrame()
-        rule.setObjectName("sectionRule")
-        rule.setFrameShape(QtWidgets.QFrame.Shape.HLine)
-        layout.addWidget(rule)
+        if not embedded:
+            rule = QtWidgets.QFrame()
+            rule.setObjectName("sectionRule")
+            rule.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+            layout.addWidget(rule)
         return layout
 
 
@@ -127,6 +223,10 @@ if QtCore is not None:
         table.setAlternatingRowColors(True)
         table.setShowGrid(False)
         table.verticalHeader().setVisible(False)
+        table.verticalHeader().setDefaultSectionSize(34)
+        table.horizontalHeader().setDefaultAlignment(
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
+        )
         table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
 
@@ -158,16 +258,24 @@ if QtCore is not None:
             application.setFont(QtGui.QFont(family, 10))
 
 
-    def _metric_widget(label_text: str, value_text: str) -> QtWidgets.QWidget:
+    def _metric_widget(
+        label_text: str, value_text: str, state: str | None = None
+    ) -> QtWidgets.QWidget:
+        """仪表读数卡：缺失数据一律显示“不可用”（IDLE 色），不显示 0。"""
         widget = QtWidgets.QWidget()
         widget.setObjectName("metricPanel")
         layout = QtWidgets.QVBoxLayout(widget)
-        layout.setContentsMargins(14, 11, 14, 11)
-        layout.setSpacing(3)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(4)
         label = QtWidgets.QLabel(label_text)
         label.setObjectName("metricLabel")
         value = QtWidgets.QLabel(value_text)
         value.setObjectName("metricValue")
+        if state:
+            value.setProperty("state", state)
+            # 内联颜色，不依赖 QSS 属性选择器单一路径：
+            # "不可用" 必为 IDLE，"可用" 为 OK，判定按 verdict 语义着色。
+            value.setStyleSheet(f"color: {METRIC_STATE_COLORS.get(state, IDLE)};")
         value.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(label)
         layout.addWidget(value)
@@ -180,6 +288,96 @@ if QtCore is not None:
             return False
         combo.setCurrentIndex(index)
         return True
+
+
+    class ActionCard(QtWidgets.QWidget):
+        """首页纵向操作卡：2px 竖条 + 序号 + 标题/描述 + 箭头。"""
+
+        clicked = QtCore.Signal()
+
+        def __init__(
+            self,
+            number: str,
+            title: str,
+            description: str,
+            callback: Callable[[], None],
+            featured: bool = False,
+        ):
+            super().__init__()
+            self.setObjectName("actionCard")
+            # 自定义 QWidget 子类默认不绘制 QSS 背景/边框，必须显式打开，
+            # 否则 PANEL 底 + 1px LINE 边 + hover RAISED 全部不可见。
+            self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
+            self.setProperty("featured", bool(featured))
+            self.setProperty("hovered", False)
+            self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+            self.setMinimumHeight(104)
+            self.title_text = title
+            self.description_text = description
+
+            layout = QtWidgets.QHBoxLayout(self)
+            layout.setContentsMargins(0, 0, 20, 0)
+            layout.setSpacing(0)
+            bar = QtWidgets.QFrame()
+            bar.setObjectName("actionCardBar")
+            layout.addWidget(bar)
+            layout.addSpacing(22)
+            number_label = QtWidgets.QLabel(number)
+            number_label.setObjectName("actionCardNumber")
+            layout.addWidget(number_label)
+            layout.addSpacing(22)
+            text_column = QtWidgets.QVBoxLayout()
+            text_column.setContentsMargins(0, 0, 0, 0)
+            text_column.setSpacing(4)
+            title_label = QtWidgets.QLabel(title)
+            title_label.setObjectName("actionCardTitle")
+            desc_label = QtWidgets.QLabel(description)
+            desc_label.setObjectName("actionCardDesc")
+            text_column.addWidget(title_label)
+            text_column.addWidget(desc_label)
+            layout.addLayout(text_column, 1)
+            arrow = QtWidgets.QLabel("→")
+            arrow.setObjectName("actionCardArrow")
+            layout.addWidget(arrow)
+            self.clicked.connect(callback)
+
+        def click(self) -> None:
+            """与 QPushButton.click() 等价，供测试与键盘路径使用。"""
+            self.clicked.emit()
+
+        def _set_hovered(self, hovered: bool) -> None:
+            """悬停状态走动态属性；QSS 的 :hover 伪态在离屏环境下不可靠。"""
+            if self.property("hovered") == hovered:
+                return
+            self.setProperty("hovered", hovered)
+            self.style().unpolish(self)
+            self.style().polish(self)
+
+        def enterEvent(self, event: QtCore.QEnterEvent) -> None:
+            self._set_hovered(True)
+            super().enterEvent(event)
+
+        def leaveEvent(self, event: QtCore.QEvent) -> None:
+            self._set_hovered(False)
+            super().leaveEvent(event)
+
+        def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
+            if event.button() == QtCore.Qt.MouseButton.LeftButton:
+                self.clicked.emit()
+                event.accept()
+                return
+            super().mouseReleaseEvent(event)
+
+        def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
+            if event.key() in (
+                QtCore.Qt.Key.Key_Return,
+                QtCore.Qt.Key.Key_Enter,
+                QtCore.Qt.Key.Key_Space,
+            ):
+                self.clicked.emit()
+                event.accept()
+                return
+            super().keyPressEvent(event)
 
 
     class RefreshablePage(QtWidgets.QWidget):
@@ -341,6 +539,7 @@ if QtCore is not None:
                 "录制窗口",
                 "本页按钮只记录 PC 观察时间，不会向 Brain 下发命令。Controller 长按 Y "
                 "至少 3 秒并松开开始录制；长按 Y 至少 1 秒并松开停止。完整数据保存在 TF 卡。",
+                embedded=True,
             )
             session_label = QtWidgets.QLabel("关联会话")
             session_label.setObjectName("sectionTitle")
@@ -354,6 +553,7 @@ if QtCore is not None:
             self.stop.clicked.connect(lambda: self.marker("STOP"))
             buttons.addWidget(self.start)
             buttons.addWidget(self.stop)
+            buttons.addStretch()
             layout.addLayout(buttons)
             self.status = QtWidgets.QLabel("当前应用会话中尚未记录 PC 时间标记。")
             self.status.setObjectName("statusCard")
@@ -497,7 +697,10 @@ if QtCore is not None:
                     f"{candidate.duration_s:.3f}",
                 ]
                 for column, value in enumerate(values, start=1):
-                    self.table.setItem(row, column, QtWidgets.QTableWidgetItem(str(value)))
+                    item = QtWidgets.QTableWidgetItem(str(value))
+                    if column == 2:
+                        item.setForeground(QtGui.QColor(_semantic_color(status_value)))
+                    self.table.setItem(row, column, item)
 
         def import_checked(self):
             session_id = self.session.currentData()
@@ -530,6 +733,7 @@ if QtCore is not None:
                 self,
                 "完整性校验",
                 "性能结论必须建立在可追溯的数据上。缺帧、截断或身份不一致会明确标为复测或失败。",
+                embedded=True,
             )
             self.run = QtWidgets.QComboBox()
             self.run.currentIndexChanged.connect(self.load)
@@ -558,19 +762,30 @@ if QtCore is not None:
                     self.run.setCurrentIndex(index)
             self.load()
 
+        def _set_verdict(self, text: str, verdict_value: str) -> None:
+            self.verdict.setText(text)
+            self.verdict.setProperty("verdictValue", verdict_value)
+            self.style().unpolish(self.verdict)
+            self.style().polish(self.verdict)
+
         def load(self):
             run_id = self.run.currentData()
             if not run_id:
-                self.verdict.setText("尚未导入记录")
+                self._set_verdict("尚未导入记录", "")
                 self.text.clear()
                 return
-            run = self.repo.get_run(run_id)
-            path = Path(run.artifact_dir) / "integrity" / "integrity_report.json"
-            data = json.loads(path.read_text(encoding="utf-8"))
-            self.verdict.setText(VERDICT_LABELS.get(data["verdict"], data["verdict"]))
-            self.verdict.setProperty("verdictValue", data["verdict"])
-            self.style().unpolish(self.verdict)
-            self.style().polish(self.verdict)
+            try:
+                run = self.repo.get_run(run_id)
+                path = Path(run.artifact_dir) / "integrity" / "integrity_report.json"
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except Exception as error:
+                # 报告缺失/损坏：如实显示不可用与错误内容，不伪造判定。
+                self._set_verdict("完整性报告不可用", "")
+                self.text.setPlainText(str(error))
+                return
+            self._set_verdict(
+                VERDICT_LABELS.get(data["verdict"], data["verdict"]), data["verdict"]
+            )
             self.text.setPlainText(json.dumps(data, indent=2, ensure_ascii=False))
 
 
@@ -582,6 +797,7 @@ if QtCore is not None:
                 self,
                 "运行总览",
                 "生成确定性指标、异常证据和静态图。缺少位姿或 PID 分项时会显示“不可用”。",
+                embedded=True,
             )
             top = QtWidgets.QHBoxLayout()
             self.run = QtWidgets.QComboBox()
@@ -596,7 +812,12 @@ if QtCore is not None:
             top.addWidget(self.analyze_button)
             layout.addLayout(top)
             self.cards = QtWidgets.QGridLayout()
+            self.cards.setHorizontalSpacing(12)
+            self.cards.setVerticalSpacing(12)
             layout.addLayout(self.cards)
+            self.anomalies_empty = _faint_label("未检测到异常证据")
+            self.anomalies_empty.setContentsMargins(4, 8, 4, 8)
+            layout.addWidget(self.anomalies_empty)
             self.anomalies = QtWidgets.QTableWidget(0, 5)
             self.anomalies.setHorizontalHeaderLabels(
                 ["ID", "层级", "严重性", "摘要", "证据时间窗"]
@@ -637,6 +858,7 @@ if QtCore is not None:
             self.anomalies.setRowCount(0)
             run_id = self.run.currentData()
             if not run_id:
+                self._update_anomaly_visibility()
                 return
             try:
                 analysis = self.repo.get_analysis(run_id)
@@ -644,29 +866,33 @@ if QtCore is not None:
                 card = QtWidgets.QLabel("尚未分析。选择运行后点击“开始分析”。")
                 card.setObjectName("statusCard")
                 self.cards.addWidget(card, 0, 0)
+                self._update_anomaly_visibility()
                 return
             metrics = analysis.metrics
             exec_p99 = metrics["timing"]["exec_s"]["p99"]
+            verdict_value = analysis.integrity_verdict.value
             values = [
                 (
                     "完整性",
-                    VERDICT_LABELS.get(
-                        analysis.integrity_verdict.value, analysis.integrity_verdict.value
-                    ),
+                    VERDICT_LABELS.get(verdict_value, verdict_value),
+                    _verdict_state(verdict_value),
                 ),
-                ("位姿", "可用" if analysis.capability["pose"] else "不可用"),
-                ("PID 分项", "可用" if analysis.capability["pid_terms"] else "不可用"),
-                ("录制时长", f"{metrics['duration_s']:.3f} s"),
-                ("样本数", str(metrics["samples"])),
+                ("位姿", "可用" if analysis.capability["pose"] else "不可用",
+                 "ok" if analysis.capability["pose"] else "idle"),
+                ("PID 分项", "可用" if analysis.capability["pid_terms"] else "不可用",
+                 "ok" if analysis.capability["pid_terms"] else "idle"),
+                ("录制时长", f"{metrics['duration_s']:.3f} s", None),
+                ("样本数", str(metrics["samples"]), None),
                 (
                     "执行时间 p99",
                     f"{exec_p99 * 1000:.3f} ms" if exec_p99 is not None else "不可用",
+                    None if exec_p99 is not None else "idle",
                 ),
-                ("超期帧", str(metrics["timing"]["overrun_frames"])),
-                ("异常数", str(len(analysis.anomalies))),
+                ("超期帧", str(metrics["timing"]["overrun_frames"]), None),
+                ("异常数", str(len(analysis.anomalies)), None),
             ]
-            for index, (label, value) in enumerate(values):
-                self.cards.addWidget(_metric_widget(label, value), index // 4, index % 4)
+            for index, (label, value, state) in enumerate(values):
+                self.cards.addWidget(_metric_widget(label, value, state), index // 4, index % 4)
             self.anomalies.setRowCount(len(analysis.anomalies))
             for row, anomaly in enumerate(analysis.anomalies):
                 for column, value in enumerate(
@@ -678,7 +904,16 @@ if QtCore is not None:
                         anomaly.get("evidence_window_s"),
                     ]
                 ):
-                    self.anomalies.setItem(row, column, QtWidgets.QTableWidgetItem(str(value)))
+                    item = QtWidgets.QTableWidgetItem(str(value))
+                    if column == 2:
+                        item.setForeground(QtGui.QColor(_severity_color(anomaly["severity"])))
+                    self.anomalies.setItem(row, column, item)
+            self._update_anomaly_visibility()
+
+        def _update_anomaly_visibility(self) -> None:
+            has_rows = self.anomalies.rowCount() > 0
+            self.anomalies.setVisible(has_rows)
+            self.anomalies_empty.setVisible(not has_rows)
 
 
     class PlotsPage(RefreshablePage):
@@ -708,11 +943,13 @@ if QtCore is not None:
                 self,
                 "图表分析",
                 "按完整样本交互查看信号；时间缺口保持断开，不进行静默插值。",
+                embedded=True,
             )
             top = QtWidgets.QHBoxLayout()
             self.run = QtWidgets.QComboBox()
             self.run.currentIndexChanged.connect(self.load)
             self.signal = QtWidgets.QComboBox()
+            self.signal.setMinimumWidth(240)
             self.signal.addItems(self.SIGNALS)
             self.signal.currentIndexChanged.connect(self.load)
             open_dir = QtWidgets.QPushButton("打开静态图目录")
@@ -720,15 +957,16 @@ if QtCore is not None:
             top.addWidget(self.run, 1)
             top.addWidget(self.signal)
             top.addWidget(open_dir)
+            top.addStretch()
             layout.addLayout(top)
             self.plot = pg.PlotWidget()
-            self.plot.setBackground(PAPER)
-            self.plot.showGrid(x=True, y=True, alpha=0.12)
+            self.plot.setBackground(PLOT_BACKGROUND)
+            self.plot.showGrid(x=True, y=True, alpha=PLOT_GRID_ALPHA)
             self.plot.setLabel("bottom", "机器人单调时间", units="s")
             for axis_name in ("left", "bottom"):
                 axis = self.plot.getAxis(axis_name)
-                axis.setPen(pg.mkPen(RULE))
-                axis.setTextPen(pg.mkPen(MUTED))
+                axis.setPen(pg.mkPen(LINE))
+                axis.setTextPen(pg.mkPen(TEXT_FAINT))
             layout.addWidget(self.plot)
             self.note = QtWidgets.QLabel(self.NOTE)
             self.note.setObjectName("pageDescription")
@@ -766,9 +1004,11 @@ if QtCore is not None:
                 )
                 time_s = table["time_s"].to_numpy()
                 values = table[signal_name].to_numpy()
-                self.plot.plot(time_s, values, pen=pg.mkPen(VEX_RED, width=1.6))
+                self.plot.plot(time_s, values, pen=pg.mkPen(ACCENT, width=1.8))
                 self.plot.setLabel("left", signal_name)
-                self.plot.setTitle(f"{run_id} · {signal_name}")
+                self.plot.setTitle(
+                    f"{run_id} · {signal_name}", color=TEXT_DIM, size="12pt"
+                )
             except Exception as error:
                 self.note.setText(str(error))
 
@@ -787,15 +1027,25 @@ if QtCore is not None:
                 self,
                 "运行对比",
                 "选择至少两段已分析记录。系统会保留软件、配置、机器人身份和工况差异。",
+                embedded=True,
             )
             self.runs = QtWidgets.QListWidget()
-            self.runs.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.MultiSelection)
             layout.addWidget(self.runs)
+            button_row = QtWidgets.QHBoxLayout()
             button = _primary(QtWidgets.QPushButton("对比所选运行"))
+            button.setMaximumWidth(220)
             button.clicked.connect(self.compare)
-            layout.addWidget(button)
+            button_row.addWidget(button)
+            button_row.addStretch()
+            layout.addLayout(button_row)
             self.output = QtWidgets.QPlainTextEdit()
             self.output.setReadOnly(True)
+            self.output.setPlaceholderText("勾选至少两段已分析记录后点击对比。")
+            output_palette = self.output.palette()
+            output_palette.setColor(
+                QtGui.QPalette.ColorRole.PlaceholderText, QtGui.QColor(TEXT_FAINT)
+            )
+            self.output.setPalette(output_palette)
             layout.addWidget(self.output)
             self.refresh()
 
@@ -804,12 +1054,15 @@ if QtCore is not None:
             for run in self.repo.list_runs():
                 item = QtWidgets.QListWidgetItem(f"{run.run_id} · {run.identity.robot_id}")
                 item.setData(QtCore.Qt.ItemDataRole.UserRole, run.run_id)
+                item.setFlags(item.flags() | QtCore.Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(QtCore.Qt.CheckState.Unchecked)
                 self.runs.addItem(item)
 
         def compare(self):
             run_ids = [
-                item.data(QtCore.Qt.ItemDataRole.UserRole)
-                for item in self.runs.selectedItems()
+                self.runs.item(index).data(QtCore.Qt.ItemDataRole.UserRole)
+                for index in range(self.runs.count())
+                if self.runs.item(index).checkState() == QtCore.Qt.CheckState.Checked
             ]
             try:
                 path = compare_runs(run_ids, self.repo)
@@ -825,6 +1078,7 @@ if QtCore is not None:
                 self,
                 "LLM 报告",
                 "查看面向 LLM 的可追溯证据报告。报告保留技术字段和英文数据键，便于机器读取。",
+                embedded=True,
             )
             top = QtWidgets.QHBoxLayout()
             self.run = QtWidgets.QComboBox()
@@ -836,6 +1090,7 @@ if QtCore is not None:
             top.addWidget(self.run, 1)
             top.addWidget(regenerate)
             top.addWidget(open_file)
+            top.addStretch()
             layout.addLayout(top)
             self.text = QtWidgets.QPlainTextEdit()
             self.text.setReadOnly(True)
@@ -890,21 +1145,69 @@ if QtCore is not None:
     class HomePage(RefreshablePage):
         def __init__(self, repo, on_new, on_continue, on_history):
             super().__init__(repo, lambda: None)
-            layout = QtWidgets.QVBoxLayout(self)
-            layout.setContentsMargins(42, 54, 42, 54)
-            layout.setSpacing(18)
-            layout.addStretch()
-            kicker = QtWidgets.QLabel("VEX V5 / TF 飞行记录")
-            kicker.setObjectName("homeKicker")
-            title = QtWidgets.QLabel("选择接下来要做的事情")
+            layout = QtWidgets.QHBoxLayout(self)
+            layout.setContentsMargins(40, 48, 40, 48)
+            layout.setSpacing(48)
+
+            left_column = QtWidgets.QVBoxLayout()
+            left_column.setContentsMargins(8, 0, 0, 0)
+            left_column.setSpacing(10)
+            left_column.addSpacing(40)
+            left_column.addWidget(_kicker_label("VEX V5 · TF FLIGHT RECORD"))
+            title = QtWidgets.QLabel("飞行记录与诊断系统")
             title.setObjectName("homeTitle")
-            subtitle = QtWidgets.QLabel("从创建记录到查看分析，只需要完成一条清晰流程。")
+            left_column.addWidget(title)
+            subtitle = QtWidgets.QLabel(
+                "面向机器人研发与工程测试的离线记录导入、完整性校验与数据诊断。"
+            )
             subtitle.setObjectName("homeSubtitle")
-            layout.addWidget(kicker)
-            layout.addWidget(title)
-            layout.addWidget(subtitle)
-            actions = QtWidgets.QHBoxLayout()
-            actions.setSpacing(14)
+            subtitle.setWordWrap(True)
+            left_column.addWidget(subtitle)
+            left_column.addSpacing(18)
+            rule = QtWidgets.QFrame()
+            rule.setObjectName("sectionRule")
+            rule.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+            left_column.addWidget(rule)
+            left_column.addSpacing(12)
+            meta_rows = [
+                ("版本", f"v{__version__}"),
+                ("数据目录", str(repo.settings.artifacts)),
+                ("分析引擎版本", ANALYSIS_VERSION),
+            ]
+            meta = QtWidgets.QGridLayout()
+            meta.setHorizontalSpacing(18)
+            meta.setVerticalSpacing(6)
+            for row, (key, value) in enumerate(meta_rows):
+                if not value:
+                    continue
+                key_label = QtWidgets.QLabel(key)
+                key_label.setObjectName("homeMetaKey")
+                value_label = QtWidgets.QLabel()
+                value_label.setObjectName("homeMetaValue")
+                if key == "数据目录":
+                    # 左栏宽度有限：ElideMiddle 保留盘符与末级，完整路径见底栏。
+                    metrics = QtGui.QFontMetrics(value_label.font())
+                    value_label.setText(
+                        metrics.elidedText(
+                            value, QtCore.Qt.TextElideMode.ElideMiddle, 280
+                        )
+                    )
+                    value_label.setToolTip(value)
+                else:
+                    value_label.setText(value)
+                meta.addWidget(key_label, row, 0)
+                meta.addWidget(value_label, row, 1)
+            left_column.addLayout(meta)
+            left_column.addStretch()
+            left_widget = QtWidgets.QWidget()
+            left_widget.setLayout(left_column)
+            left_widget.setFixedWidth(400)
+            layout.addWidget(left_widget)
+
+            right_column = QtWidgets.QVBoxLayout()
+            right_column.setContentsMargins(0, 0, 0, 0)
+            right_column.setSpacing(14)
+            right_column.addStretch()
             definitions = [
                 (
                     "01",
@@ -929,19 +1232,12 @@ if QtCore is not None:
                 ),
             ]
             self.action_buttons = []
-            for number, label, description, callback, primary in definitions:
-                button = QtWidgets.QPushButton(
-                    f"{number}\n{label}\n{description}"
-                )
-                button.setObjectName("homeAction")
-                button.setProperty("featured", primary)
-                button.setMinimumHeight(190)
-                button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-                button.clicked.connect(callback)
-                actions.addWidget(button, 1)
-                self.action_buttons.append(button)
-            layout.addLayout(actions)
-            layout.addStretch()
+            for number, label, description, callback, featured in definitions:
+                card = ActionCard(number, label, description, callback, featured)
+                right_column.addWidget(card)
+                self.action_buttons.append(card)
+            right_column.addStretch()
+            layout.addLayout(right_column, 1)
 
 
     class LoadingPage(QtWidgets.QWidget):
@@ -953,26 +1249,53 @@ if QtCore is not None:
             self.timer = QtCore.QTimer(self)
             self.timer.setInterval(360)
             self.timer.timeout.connect(self._animate)
-            layout = QtWidgets.QVBoxLayout(self)
-            layout.setContentsMargins(120, 80, 120, 80)
-            layout.addStretch()
-            self.code = QtWidgets.QLabel("PROCESSING / OFFLINE")
-            self.code.setObjectName("loadingCode")
+            outer = QtWidgets.QVBoxLayout(self)
+            outer.setContentsMargins(40, 40, 40, 40)
+            outer.addStretch()
+            center_row = QtWidgets.QHBoxLayout()
+            center_row.addStretch()
+            column = QtWidgets.QVBoxLayout()
+            column.setSpacing(10)
+            self.code = _kicker_label("OFFLINE PIPELINE", "loadingCode")
             self.title = QtWidgets.QLabel(self._base_text)
             self.title.setObjectName("loadingTitle")
             self.detail = QtWidgets.QLabel(
                 "系统正在校验原始记录、生成分析结果和 LLM 信息包，请勿移除数据源。"
             )
-            self.detail.setObjectName("homeSubtitle")
+            self.detail.setObjectName("pageDescription")
             self.detail.setWordWrap(True)
             self.progress = QtWidgets.QProgressBar()
             self.progress.setRange(0, 0)
-            layout.addWidget(self.code)
-            layout.addWidget(self.title)
-            layout.addWidget(self.detail)
-            layout.addSpacing(18)
-            layout.addWidget(self.progress)
-            layout.addStretch()
+            progress_rule_top = self._hair_rule()
+            progress_rule_bottom = self._hair_rule()
+            self.steps_line = QtWidgets.QLabel(
+                "完整性校验 → 只读归档 → 指标与图表分析 → LLM 信息包"
+            )
+            self.steps_line.setObjectName("loadingSteps")
+            column.addWidget(self.code)
+            column.addWidget(self.title)
+            column.addWidget(self.detail)
+            column.addSpacing(10)
+            column.addWidget(progress_rule_top)
+            column.addSpacing(8)
+            column.addWidget(self.progress)
+            column.addSpacing(8)
+            column.addWidget(progress_rule_bottom)
+            column.addSpacing(4)
+            column.addWidget(self.steps_line)
+            center_row.addLayout(column)
+            center_row.addStretch()
+            outer.addLayout(center_row)
+            outer.addStretch()
+
+        @staticmethod
+        def _hair_rule() -> QtWidgets.QFrame:
+            rule = QtWidgets.QFrame()
+            # QSS max-height 只限制上限，空 QFrame sizeHint 高 0 会被布局压没；
+            # 必须在代码里给定 1px 固定高度。
+            rule.setFixedHeight(1)
+            rule.setStyleSheet(f"background: {LINE_SOFT}; border: none;")
+            return rule
 
         def start(self, message: str, detail: str = "") -> None:
             self._base_text = message
@@ -1005,11 +1328,11 @@ if QtCore is not None:
             self.step_index = 0
 
             layout = QtWidgets.QVBoxLayout(self)
-            layout.setContentsMargins(42, 28, 42, 34)
-            layout.setSpacing(14)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
             top = QtWidgets.QHBoxLayout()
-            back_home = QtWidgets.QPushButton("← 返回首页")
-            back_home.setProperty("role", "quiet")
+            top.setContentsMargins(32, 20, 32, 12)
+            back_home = _quiet(QtWidgets.QPushButton("← 返回首页"))
             back_home.clicked.connect(on_home)
             self.flow_title = QtWidgets.QLabel("新建 TF 记录")
             self.flow_title.setObjectName("pageTitle")
@@ -1019,22 +1342,62 @@ if QtCore is not None:
             top.addStretch()
             layout.addLayout(top)
 
-            self.step_bar = QtWidgets.QHBoxLayout()
-            self.step_labels = []
-            for index, name in enumerate(self.STEP_NAMES, start=1):
-                label = QtWidgets.QLabel(f"{index:02d}  {name}")
-                label.setObjectName("wizardStep")
-                self.step_bar.addWidget(label, 1)
-                self.step_labels.append(label)
-            layout.addLayout(self.step_bar)
+            body = QtWidgets.QHBoxLayout()
+            body.setContentsMargins(0, 0, 0, 0)
+            body.setSpacing(0)
 
+            rail = QtWidgets.QWidget()
+            rail.setObjectName("wizardRail")
+            rail.setFixedWidth(230)
+            rail_layout = QtWidgets.QVBoxLayout(rail)
+            rail_layout.setContentsMargins(0, 16, 0, 20)
+            rail_layout.setSpacing(6)
+            self.step_labels = []
+            self.step_blocks = []
+            for index, name in enumerate(self.STEP_NAMES, start=1):
+                block = QtWidgets.QWidget()
+                block.setObjectName("wizardStepBlock")
+                block_layout = QtWidgets.QHBoxLayout(block)
+                block_layout.setContentsMargins(20, 8, 12, 8)
+                block_layout.setSpacing(10)
+                number = QtWidgets.QLabel(f"{index:02d}")
+                number.setObjectName("wizardStepNumber")
+                label = QtWidgets.QLabel(name)
+                label.setObjectName("wizardStep")
+                block_layout.addWidget(number)
+                block_layout.addWidget(label)
+                block_layout.addStretch()
+                rail_layout.addWidget(block)
+                self.step_blocks.append(block)
+                self.step_labels.append(label)
+            rail_layout.addStretch()
+            rail_hint = QtWidgets.QLabel(
+                "带 * 为必填；机器人身份以 TF 原始记录为准"
+            )
+            rail_hint.setObjectName("wizardRailHint")
+            rail_hint.setWordWrap(True)
+            rail_hint.setContentsMargins(20, 0, 16, 0)
+            rail_layout.addWidget(rail_hint)
+            body.addWidget(rail)
+
+            content = QtWidgets.QWidget()
+            content_layout = QtWidgets.QVBoxLayout(content)
+            content_layout.setContentsMargins(28, 16, 28, 12)
+            content_layout.setSpacing(0)
             self.steps = QtWidgets.QStackedWidget()
             self.steps.addWidget(self._build_identity_step())
             self.steps.addWidget(self._build_conditions_step())
             self.steps.addWidget(self._build_import_step())
-            layout.addWidget(self.steps, 1)
+            content_layout.addWidget(self.steps, 1)
+            body.addWidget(content, 1)
+            layout.addLayout(body, 1)
 
+            control_rule = QtWidgets.QFrame()
+            control_rule.setObjectName("wizardControlRule")
+            control_rule.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+            layout.addWidget(control_rule)
             controls = QtWidgets.QHBoxLayout()
+            controls.setContentsMargins(32, 12, 32, 16)
             self.back_button = QtWidgets.QPushButton("上一步")
             self.back_button.clicked.connect(self.previous_step)
             self.next_button = _primary(QtWidgets.QPushButton("下一步"))
@@ -1050,6 +1413,7 @@ if QtCore is not None:
             page.setObjectName("wizardPanel")
             outer = QtWidgets.QVBoxLayout(page)
             outer.setContentsMargins(28, 24, 28, 24)
+            outer.setSpacing(14)
             heading = QtWidgets.QLabel(title)
             heading.setObjectName("sectionHeading")
             hint = QtWidgets.QLabel(description)
@@ -1059,9 +1423,14 @@ if QtCore is not None:
             outer.addWidget(hint)
             form = QtWidgets.QFormLayout()
             form.setHorizontalSpacing(22)
-            form.setVerticalSpacing(12)
-            form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
-            outer.addLayout(form)
+            form.setVerticalSpacing(14)
+            form.setLabelAlignment(
+                QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+            )
+            form_host = QtWidgets.QWidget()
+            form_host.setMaximumWidth(760)  # 表单不拉满面板，右侧留白
+            form_host.setLayout(form)
+            outer.addWidget(form_host)
             outer.addStretch()
             return page, form
 
@@ -1081,11 +1450,11 @@ if QtCore is not None:
             self.dataset_role = QtWidgets.QComboBox()
             for role in DatasetRole:
                 self.dataset_role.addItem(DATASET_ROLE_LABELS[role], role)
-            form.addRow("队号 *", self.team)
-            form.addRow("操作员 *", self.operator)
-            form.addRow("测试类型 *", self.test_type)
-            form.addRow("测试用例 ID", self.test_case)
-            form.addRow("数据集用途", self.dataset_role)
+            form.addRow(_form_label("队号 *"), self.team)
+            form.addRow(_form_label("操作员 *"), self.operator)
+            form.addRow(_form_label("测试类型 *"), self.test_type)
+            form.addRow(_form_label("测试用例 ID"), self.test_case)
+            form.addRow(_form_label("数据集用途"), self.dataset_role)
             return page
 
         def _build_conditions_step(self) -> QtWidgets.QWidget:
@@ -1099,11 +1468,11 @@ if QtCore is not None:
             self.expected_robot = QtWidgets.QLineEdit()
             self.notes = QtWidgets.QPlainTextEdit()
             self.notes.setMaximumHeight(100)
-            form.addRow("观察员", self.observer)
-            form.addRow("场地表面", self.surface)
-            form.addRow("电池编号", self.battery)
-            form.addRow("预期机器人 ID", self.expected_robot)
-            form.addRow("备注", self.notes)
+            form.addRow(_form_label("观察员"), self.observer)
+            form.addRow(_form_label("场地表面"), self.surface)
+            form.addRow(_form_label("电池编号"), self.battery)
+            form.addRow(_form_label("预期机器人 ID"), self.expected_robot)
+            form.addRow(_form_label("备注"), self.notes)
             return page
 
         def _build_import_step(self) -> QtWidgets.QWidget:
@@ -1111,6 +1480,7 @@ if QtCore is not None:
             page.setObjectName("wizardPanel")
             layout = QtWidgets.QVBoxLayout(page)
             layout.setContentsMargins(28, 24, 28, 24)
+            layout.setSpacing(14)
             heading = QtWidgets.QLabel("选择要导入的 TF 记录")
             heading.setObjectName("sectionHeading")
             hint = QtWidgets.QLabel(
@@ -1140,9 +1510,19 @@ if QtCore is not None:
                 ["导入", "文件", "完整性", "机器人", "序号", "帧数", "时长 [s]"]
             )
             _configure_table(self.table)
-            self.table.horizontalHeader().setSectionResizeMode(
-                1, QtWidgets.QHeaderView.ResizeMode.Stretch
-            )
+            # 列宽策略：完整性为语义关键列，固定宽且禁止截断；
+            # 文件列 Stretch + ElideMiddle 保留盘符与文件名，完整路径进 ToolTip。
+            self.table.setTextElideMode(QtCore.Qt.TextElideMode.ElideMiddle)
+            header = self.table.horizontalHeader()
+            header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Interactive)
+            header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Stretch)
+            header.setStretchLastSection(False)
+            self.table.setColumnWidth(0, 44)
+            self.table.setColumnWidth(2, 160)
+            self.table.setColumnWidth(3, 90)
+            self.table.setColumnWidth(4, 70)
+            self.table.setColumnWidth(5, 80)
+            self.table.setColumnWidth(6, 90)
             layout.addWidget(self.table, 1)
             return page
 
@@ -1189,10 +1569,22 @@ if QtCore is not None:
         def _set_step(self, index: int) -> None:
             self.step_index = max(0, min(index, len(self.STEP_NAMES) - 1))
             self.steps.setCurrentIndex(self.step_index)
-            for position, label in enumerate(self.step_labels):
-                label.setProperty("state", "active" if position == self.step_index else "idle")
-                label.style().unpolish(label)
-                label.style().polish(label)
+            for position, (block, label) in enumerate(
+                zip(self.step_blocks, self.step_labels)
+            ):
+                if position < self.step_index:
+                    label_state = "done"
+                elif position == self.step_index:
+                    label_state = "active"
+                else:
+                    label_state = "idle"
+                label.setProperty("state", label_state)
+                block.setProperty(
+                    "state", "active" if position == self.step_index else "idle"
+                )
+                for widget in (block, label):
+                    widget.style().unpolish(widget)
+                    widget.style().polish(widget)
             self.back_button.setEnabled(self.step_index > 0)
             self.next_button.setText(
                 "导入、分析并查看结果" if self.step_index == 2 else "下一步"
@@ -1253,7 +1645,9 @@ if QtCore is not None:
                     else candidate.status
                 )
                 values = [
-                    str(candidate.path),
+                    # 文件列只显示文件名，杜绝长路径把语义列挤出可视区；
+                    # 完整路径放 ToolTip 与 StatusTip，可随时核对来源。
+                    candidate.path.name,
                     VERDICT_LABELS.get(status_value, status_value),
                     candidate.robot_id,
                     candidate.storage_sequence,
@@ -1261,7 +1655,13 @@ if QtCore is not None:
                     f"{candidate.duration_s:.3f}",
                 ]
                 for column, value in enumerate(values, start=1):
-                    self.table.setItem(row, column, QtWidgets.QTableWidgetItem(str(value)))
+                    item = QtWidgets.QTableWidgetItem(str(value))
+                    if column == 1:
+                        item.setToolTip(str(candidate.path))
+                        item.setStatusTip(str(candidate.path))
+                    if column == 2:
+                        item.setForeground(QtGui.QColor(_semantic_color(status_value)))
+                    self.table.setItem(row, column, item)
             if not candidates:
                 _info(self, "没有找到可识别的 V5L/TMP 记录。")
 
@@ -1334,11 +1734,10 @@ if QtCore is not None:
             self.on_history = on_history
             self.mode = "continue"
             layout = QtWidgets.QVBoxLayout(self)
-            layout.setContentsMargins(42, 28, 42, 34)
-            layout.setSpacing(14)
+            layout.setContentsMargins(32, 24, 32, 20)
+            layout.setSpacing(12)
             top = QtWidgets.QHBoxLayout()
-            home = QtWidgets.QPushButton("← 返回首页")
-            home.setProperty("role", "quiet")
+            home = _quiet(QtWidgets.QPushButton("← 返回首页"))
             home.clicked.connect(on_home)
             self.title = QtWidgets.QLabel("继续会话")
             self.title.setObjectName("pageTitle")
@@ -1355,9 +1754,16 @@ if QtCore is not None:
                 ["会话", "更新时间", "队号", "操作员", "测试类型", "记录数", "状态"]
             )
             _configure_table(self.table)
-            self.table.horizontalHeader().setSectionResizeMode(
-                0, QtWidgets.QHeaderView.ResizeMode.Stretch
+            self.table.verticalHeader().setDefaultSectionSize(36)
+            # 会话列 Stretch，其余列内容宽（ResizeToContents）：
+            # 1120 宽下更新时间等任何一列都不会被截断。
+            self.table.setTextElideMode(QtCore.Qt.TextElideMode.ElideRight)
+            header = self.table.horizontalHeader()
+            header.setSectionResizeMode(
+                QtWidgets.QHeaderView.ResizeMode.ResizeToContents
             )
+            header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
+            header.setStretchLastSection(False)
             self.table.doubleClicked.connect(lambda _: self.open_selected())
             layout.addWidget(self.table, 1)
             bottom = QtWidgets.QHBoxLayout()
@@ -1387,9 +1793,11 @@ if QtCore is not None:
             self.table.setRowCount(len(sessions))
             for row, session in enumerate(sessions):
                 run_count = len(self.repo.list_runs(session.session_id))
+                local_time = session.updated_at.astimezone()
                 values = [
                     session.session_id,
-                    session.updated_at.astimezone().strftime("%Y-%m-%d %H:%M"),
+                    # 缩短时间格式保证窄窗口不截断；完整时间放 ToolTip。
+                    local_time.strftime("%m-%d %H:%M"),
                     session.team_number,
                     session.operator,
                     TEST_TYPE_LABELS.get(session.test_type, session.test_type),
@@ -1400,6 +1808,9 @@ if QtCore is not None:
                     item = QtWidgets.QTableWidgetItem(str(value))
                     if column == 0:
                         item.setData(QtCore.Qt.ItemDataRole.UserRole, session.session_id)
+                        item.setToolTip(session.session_id)
+                    if column == 1:
+                        item.setToolTip(local_time.strftime("%Y-%m-%d %H:%M"))
                     self.table.setItem(row, column, item)
             if sessions:
                 self.table.selectRow(0)
@@ -1429,12 +1840,12 @@ if QtCore is not None:
             layout.setContentsMargins(28, 20, 28, 26)
             layout.setSpacing(12)
             top = QtWidgets.QHBoxLayout()
-            home = QtWidgets.QPushButton("← 首页")
-            home.setProperty("role", "quiet")
+            home = _quiet(QtWidgets.QPushButton("← 首页"))
             home.clicked.connect(on_home)
             self.title = QtWidgets.QLabel("会话结果")
             self.title.setObjectName("pageTitle")
             self.run = QtWidgets.QComboBox()
+            self.run.setMinimumWidth(280)
             self.run.currentIndexChanged.connect(self._sync_run)
             continue_button = QtWidgets.QPushButton("继续导入 TF 记录")
             continue_button.clicked.connect(
@@ -1444,8 +1855,8 @@ if QtCore is not None:
             top.addSpacing(10)
             top.addWidget(self.title)
             top.addStretch()
-            top.addWidget(QtWidgets.QLabel("当前记录"))
-            top.addWidget(self.run, 1)
+            top.addWidget(_faint_label("当前记录"))
+            top.addWidget(self.run)
             top.addWidget(continue_button)
             layout.addLayout(top)
             self.summary = QtWidgets.QLabel()
@@ -1535,24 +1946,46 @@ if QtCore is not None:
             shell_layout.setSpacing(0)
             header = QtWidgets.QWidget()
             header.setObjectName("topBar")
+            header.setFixedHeight(52)
             header_layout = QtWidgets.QHBoxLayout(header)
-            header_layout.setContentsMargins(24, 13, 24, 13)
-            brand = QtWidgets.QPushButton("VEX V5  /  飞行记录与诊断")
+            header_layout.setContentsMargins(24, 0, 24, 0)
+            header_layout.setSpacing(0)
+            brand_mark = QtWidgets.QLabel()
+            brand_mark.setObjectName("brandMark")
+            brand_mark.setFixedSize(8, 8)
+            brand = QtWidgets.QPushButton("74000M · 飞行记录与诊断")
             brand.setObjectName("topBrand")
             brand.clicked.connect(self.show_home)
-            read_only = QtWidgets.QLabel("●  离线分析 · 不控制机器人")
-            read_only.setObjectName("readOnlyChip")
-            version = QtWidgets.QLabel(f"版本 {__version__} · GPT-5.6")
+            offline = QtWidgets.QLabel("●  离线分析 · 不控制机器人")
+            offline.setObjectName("offlineChip")
+            version = QtWidgets.QLabel(f"v{__version__} · 离线版")
             version.setObjectName("topMeta")
+            header_layout.addWidget(brand_mark)
+            header_layout.addSpacing(10)
             header_layout.addWidget(brand)
             header_layout.addStretch()
-            header_layout.addWidget(read_only)
+            header_layout.addWidget(offline)
             header_layout.addSpacing(12)
             header_layout.addWidget(version)
             shell_layout.addWidget(header)
 
             self.tabs = QtWidgets.QStackedWidget()
             shell_layout.addWidget(self.tabs, 1)
+
+            strip = QtWidgets.QWidget()
+            strip.setObjectName("statusStrip")
+            strip.setFixedHeight(26)
+            strip_layout = QtWidgets.QHBoxLayout(strip)
+            strip_layout.setContentsMargins(24, 0, 24, 0)
+            strip_layout.setSpacing(0)
+            path_label = QtWidgets.QLabel(str(self.repo.settings.artifacts))
+            path_label.setObjectName("statusPath")
+            note_label = QtWidgets.QLabel("PC 时间标记仅记录本地时间 · 不下发机器人")
+            note_label.setObjectName("statusNote")
+            strip_layout.addWidget(path_label)
+            strip_layout.addStretch()
+            strip_layout.addWidget(note_label)
+            shell_layout.addWidget(strip)
             self.setCentralWidget(shell)
 
             self.home_page = HomePage(
@@ -1591,7 +2024,6 @@ if QtCore is not None:
             for page in self.pages:
                 self.tabs.addWidget(page)
             self.show_home()
-            self.statusBar().hide()
 
         def show_home(self) -> None:
             self.loading_page.stop()
@@ -1671,7 +2103,7 @@ def main() -> int:
     application.setOrganizationName("74000M")
     application.setStyle("Fusion")
     _ensure_ui_font()
-    application.setStyleSheet(SWISS_GRID_STYLE)
+    application.setStyleSheet(application_stylesheet())
     window = MainWindow()
     window.show()
     if os.environ.get("STATUSMONITOR_SMOKE_TEST") == "1":
