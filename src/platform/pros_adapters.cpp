@@ -149,10 +149,18 @@ bool ProsDriveIO::initialize() {
     success = configureMotor(motor) && success;
   for (const auto& motor : hardware_.right)
     success = configureMotor(motor) && success;
+  if (hardware_.lift.installed) {
+    for (const auto& motor : hardware_.lift.motors)
+      success = configureMotor(motor) && success;
+  }
   // The 1690X commissioning policy keeps all six drivetrain brake modes in
   // Coast. Nonzero voltage commands still drive normally; the mode controls
   // only the behavior after an explicit brake/zero command.
   success = stop(StopMode::Coast) && success;
+  success = stopLift(StopMode::Hold) && success;
+  // Commissioning contract: the operator places the Lift at its physical
+  // lower stop before boot, then both internal encoders establish 0 degrees.
+  success = zeroLiftAtLowerLimit() && success;
   return success;
 }
 
@@ -213,6 +221,10 @@ RawDriveInputs ProsDriveIO::readAll(const FrameHeader& header) {
   for (std::size_t i = 0; i < kMotorsPerSide; ++i) {
     inputs.left.motor[i] = readMotor(hardware_.left[i]);
     inputs.right.motor[i] = readMotor(hardware_.right[i]);
+  }
+  if (hardware_.lift.installed) {
+    for (std::size_t i = 0; i < kLiftMotorCount; ++i)
+      inputs.lift[i] = readMotor(hardware_.lift.motors[i]);
   }
 
   if (hardware_.imu.installed) {
@@ -290,6 +302,50 @@ bool ProsDriveIO::stop(StopMode mode) {
     success = pros::c::motor_brake(motor.smart_port) != PROS_ERR && success;
   }
   for (const auto& motor : hardware_.right) {
+    success = pros::c::motor_set_brake_mode(motor.smart_port, pros_mode) !=
+                  PROS_ERR &&
+              success;
+    success = pros::c::motor_brake(motor.smart_port) != PROS_ERR && success;
+  }
+  return success;
+}
+
+bool ProsDriveIO::zeroLiftAtLowerLimit() {
+  if (!structurally_valid_) return false;
+  if (!hardware_.lift.installed) return true;
+  bool success = true;
+  for (const auto& motor : hardware_.lift.motors) {
+    success = pros::c::motor_tare_position(motor.smart_port) != PROS_ERR &&
+              success;
+  }
+  return success;
+}
+
+bool ProsDriveIO::writeLiftVoltage(double voltage_V) {
+  if (!structurally_valid_ || !hardware_.lift.installed ||
+      !std::isfinite(voltage_V)) {
+    return false;
+  }
+  const double voltage = std::clamp(
+      voltage_V, -electrical_.max_command_voltage_V,
+      electrical_.max_command_voltage_V);
+  bool success = true;
+  for (const auto& motor : hardware_.lift.motors) {
+    const double signed_voltage = motor.reversed ? -voltage : voltage;
+    success = pros::c::motor_move_voltage(
+                  motor.smart_port,
+                  units::voltsToMotorMillivolts(signed_voltage)) != PROS_ERR &&
+              success;
+  }
+  return success;
+}
+
+bool ProsDriveIO::stopLift(StopMode mode) {
+  if (!structurally_valid_) return false;
+  if (!hardware_.lift.installed) return true;
+  const auto pros_mode = toProsBrake(mode);
+  bool success = true;
+  for (const auto& motor : hardware_.lift.motors) {
     success = pros::c::motor_set_brake_mode(motor.smart_port, pros_mode) !=
                   PROS_ERR &&
               success;

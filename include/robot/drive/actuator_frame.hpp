@@ -17,15 +17,19 @@ struct ActuatorFrame {
   CommandId owner_id{};
   std::uint32_t owner_lease{};
   std::uint32_t applied_limits{};
+  double lift_V{};
+  StopMode lift_zero_behavior{StopMode::Hold};
 };
 
 inline bool finiteAndBounded(const ActuatorFrame& frame,
                              double max_voltage_V) noexcept {
   return std::isfinite(frame.left_V) && std::isfinite(frame.right_V) &&
+         std::isfinite(frame.lift_V) &&
          std::isfinite(max_voltage_V) && max_voltage_V > 0.0 &&
          max_voltage_V <= 12.0 &&
          std::abs(frame.left_V) <= max_voltage_V &&
-         std::abs(frame.right_V) <= max_voltage_V;
+         std::abs(frame.right_V) <= max_voltage_V &&
+         std::abs(frame.lift_V) <= max_voltage_V;
 }
 
 }  // namespace robot

@@ -16,6 +16,9 @@ class DriveIO {
   virtual RawDriveInputs readAll(const FrameHeader& header) = 0;
   virtual bool writeVoltage(double left_V, double right_V) = 0;
   virtual bool stop(StopMode mode) = 0;
+  virtual bool zeroLiftAtLowerLimit() = 0;
+  virtual bool writeLiftVoltage(double voltage_V) = 0;
+  virtual bool stopLift(StopMode mode) = 0;
   virtual ~DriveIO() = default;
 };
 

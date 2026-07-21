@@ -42,6 +42,7 @@ if(BUILD_TESTING)
         tests/test_odometry.cpp
         tests/test_manual_drive.cpp
         tests/test_commissioning_curvature.cpp
+        tests/test_lift.cpp
         tests/test_scheduler.cpp
         tests/test_health.cpp
         tests/test_calibration.cpp

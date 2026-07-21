@@ -43,6 +43,9 @@ class ProsDriveIO final : public DriveIO {
   RawDriveInputs readAll(const FrameHeader& header) override;
   bool writeVoltage(double left_V, double right_V) override;
   bool stop(StopMode mode) override;
+  bool zeroLiftAtLowerLimit() override;
+  bool writeLiftVoltage(double voltage_V) override;
+  bool stopLift(StopMode mode) override;
 
   bool structurallyValid() const noexcept { return structurally_valid_; }
 

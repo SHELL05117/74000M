@@ -41,6 +41,7 @@ class FakeDriveIO final : public DriveIO {
       left_position_[i] = 0.0;
       right_position_[i] = 0.0;
     }
+    lift_position_.fill(0.0);
   }
 
   bool initialize() override {
@@ -66,6 +67,13 @@ class FakeDriveIO final : public DriveIO {
       fillMotor(raw.right.motor[i], hardware_.right[i], right_position_[i],
                 right_command_V_, right_fault_mask_ & (1u << i),
                 header.time_us);
+    }
+    if (hardware_.lift.installed) {
+      for (std::size_t i = 0; i < kLiftMotorCount; ++i) {
+        fillMotor(raw.lift[i], hardware_.lift.motors[i], lift_position_[i],
+                  lift_command_V_, lift_fault_mask_ & (1u << i),
+                  header.time_us);
+      }
     }
     const bool imu_ok = hardware_.imu.installed && !imu_failed_ &&
                         !imu_calibrating_;
@@ -99,6 +107,31 @@ class FakeDriveIO final : public DriveIO {
     return initialized_;
   }
 
+  bool zeroLiftAtLowerLimit() override {
+    if (!initialized_) return false;
+    lift_position_.fill(0.0);
+    return !hardware_.lift.installed || initialized_;
+  }
+
+  bool writeLiftVoltage(double voltage_V) override {
+    ++lift_write_count_;
+    if (!initialized_ || !hardware_.lift.installed ||
+        !std::isfinite(voltage_V)) {
+      return false;
+    }
+    lift_command_V_ = voltage_V;
+    lift_stopped_ = false;
+    return true;
+  }
+
+  bool stopLift(StopMode mode) override {
+    ++lift_stop_count_;
+    lift_command_V_ = 0.0;
+    last_lift_stop_mode_ = mode;
+    lift_stopped_ = true;
+    return initialized_;
+  }
+
   void advance(double dt_s) noexcept {
     if (!initialized_ || !std::isfinite(dt_s) || dt_s <= 0.0) return;
     const double left_velocity = left_command_V_ * model_.motor_radps_per_volt;
@@ -109,6 +142,12 @@ class FakeDriveIO final : public DriveIO {
         left_position_[i] += left_velocity * dt_s;
       if ((right_fault_mask_ & (1u << i)) == 0)
         right_position_[i] += right_velocity * dt_s;
+    }
+    const double lift_velocity =
+        lift_command_V_ * model_.motor_radps_per_volt;
+    for (std::size_t i = 0; i < kLiftMotorCount; ++i) {
+      if ((lift_fault_mask_ & (1u << i)) == 0)
+        lift_position_[i] += lift_velocity * dt_s;
     }
   }
 
@@ -125,9 +164,16 @@ class FakeDriveIO final : public DriveIO {
   std::uint32_t readCount() const noexcept { return read_count_; }
   std::uint32_t writeCount() const noexcept { return write_count_; }
   std::uint32_t stopCount() const noexcept { return stop_count_; }
+  std::uint32_t liftWriteCount() const noexcept { return lift_write_count_; }
+  std::uint32_t liftStopCount() const noexcept { return lift_stop_count_; }
   double leftCommandV() const noexcept { return left_command_V_; }
   double rightCommandV() const noexcept { return right_command_V_; }
   StopMode lastStopMode() const noexcept { return last_stop_mode_; }
+  double liftCommandV() const noexcept { return lift_command_V_; }
+  StopMode lastLiftStopMode() const noexcept { return last_lift_stop_mode_; }
+  void setLiftPositionRad(std::size_t index, double position_rad) noexcept {
+    if (index < kLiftMotorCount) lift_position_[index] = position_rad;
+  }
 
  private:
   void fillMotor(MotorSample& sample, const MotorPortConfig& config,
@@ -149,18 +195,25 @@ class FakeDriveIO final : public DriveIO {
   FakeDriveModel model_{};
   std::array<double, kMotorsPerSide> left_position_{};
   std::array<double, kMotorsPerSide> right_position_{};
+  std::array<double, kLiftMotorCount> lift_position_{};
   double left_command_V_{};
   double right_command_V_{};
+  double lift_command_V_{};
   double imu_rotation_rad_{};
   double imu_rate_radps_{};
   std::uint32_t left_fault_mask_{};
   std::uint32_t right_fault_mask_{};
+  std::uint32_t lift_fault_mask_{};
   std::uint32_t read_count_{};
   std::uint32_t write_count_{};
   std::uint32_t stop_count_{};
+  std::uint32_t lift_write_count_{};
+  std::uint32_t lift_stop_count_{};
   StopMode last_stop_mode_{StopMode::Coast};
+  StopMode last_lift_stop_mode_{StopMode::Hold};
   bool initialized_{};
   bool stopped_{true};
+  bool lift_stopped_{true};
   bool imu_calibrating_{};
   bool imu_failed_{};
 };

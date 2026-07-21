@@ -30,11 +30,26 @@ class RecordingDriveIO final : public robot::DriveIO {
     stop_mode = mode;
     return true;
   }
+  bool zeroLiftAtLowerLimit() override { return true; }
+  bool writeLiftVoltage(double voltage) override {
+    ++lift_write_count;
+    lift_V = voltage;
+    return true;
+  }
+  bool stopLift(robot::StopMode mode) override {
+    ++lift_stop_count;
+    lift_stop_mode = mode;
+    return true;
+  }
   int write_count{};
   int stop_count{};
+  int lift_write_count{};
+  int lift_stop_count{};
   double left_V{};
   double right_V{};
+  double lift_V{};
   robot::StopMode stop_mode{robot::StopMode::Coast};
+  robot::StopMode lift_stop_mode{robot::StopMode::Hold};
 };
 
 robot::ActuatorFrame frameAt(robot::TimeUs time_us, std::uint32_t sequence,
@@ -74,6 +89,9 @@ ROBOT_TEST("old epoch full voltage cannot cross a disable transition") {
   ROBOT_REQUIRE((result.reject_bits & robot::kOutputEpochMismatch) != 0);
   ROBOT_REQUIRE(io.write_count == 0);
   ROBOT_REQUIRE(io.stop_count == 1);
+  ROBOT_REQUIRE(io.lift_write_count == 0);
+  ROBOT_REQUIRE(io.lift_stop_count == 1);
+  ROBOT_REQUIRE(io.lift_stop_mode == robot::StopMode::Hold);
 }
 
 ROBOT_TEST("output watchdog rejects future stale and nonfinite frames") {

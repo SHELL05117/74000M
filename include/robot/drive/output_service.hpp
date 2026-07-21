@@ -28,6 +28,7 @@ struct OutputServiceConfig {
   double max_voltage_V{12.0};
   double zero_epsilon_V{1e-9};
   StopMode stale_stop_mode{StopMode::Brake};
+  StopMode lift_stale_stop_mode{StopMode::Hold};
 };
 
 struct OutputResult {
@@ -62,19 +63,23 @@ class OutputService {
       if (last_epoch_ == mode.epoch &&
           frame->h.sequence < last_sequence_)
         result.reject_bits |= kOutputSequenceRegression;
-      if (!std::isfinite(frame->left_V) || !std::isfinite(frame->right_V))
+      if (!std::isfinite(frame->left_V) || !std::isfinite(frame->right_V) ||
+          !std::isfinite(frame->lift_V))
         result.reject_bits |= kOutputNonfinite;
       if (!std::isfinite(config_.max_voltage_V) ||
           config_.max_voltage_V <= 0.0 ||
           config_.max_voltage_V > 12.0 ||
           std::abs(frame->left_V) > config_.max_voltage_V ||
-          std::abs(frame->right_V) > config_.max_voltage_V)
+          std::abs(frame->right_V) > config_.max_voltage_V ||
+          std::abs(frame->lift_V) > config_.max_voltage_V)
         result.reject_bits |= kOutputOutOfRange;
     }
 
     if (result.reject_bits != kOutputAccepted) {
       result.action = OutputAction::Stopped;
-      result.io_ok = io_.stop(config_.stale_stop_mode);
+      const bool drive_ok = io_.stop(config_.stale_stop_mode);
+      const bool lift_ok = io_.stopLift(config_.lift_stale_stop_mode);
+      result.io_ok = drive_ok && lift_ok;
       return result;
     }
 
@@ -83,13 +88,18 @@ class OutputService {
     const bool both_zero =
         std::abs(frame->left_V) <= config_.zero_epsilon_V &&
         std::abs(frame->right_V) <= config_.zero_epsilon_V;
-    if (both_zero) {
-      result.action = OutputAction::Stopped;
-      result.io_ok = io_.stop(frame->zero_behavior);
-    } else {
-      result.action = OutputAction::WroteVoltage;
-      result.io_ok = io_.writeVoltage(frame->left_V, frame->right_V);
-    }
+    const bool lift_zero =
+        std::abs(frame->lift_V) <= config_.zero_epsilon_V;
+    const bool drive_ok = both_zero
+                              ? io_.stop(frame->zero_behavior)
+                              : io_.writeVoltage(frame->left_V,
+                                                 frame->right_V);
+    const bool lift_ok = lift_zero
+                             ? io_.stopLift(frame->lift_zero_behavior)
+                             : io_.writeLiftVoltage(frame->lift_V);
+    result.action = both_zero && lift_zero ? OutputAction::Stopped
+                                           : OutputAction::WroteVoltage;
+    result.io_ok = drive_ok && lift_ok;
     return result;
   }
 

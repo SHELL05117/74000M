@@ -42,6 +42,7 @@
 #include "robot/hmi/render_models.hpp"
 #include "robot/hmi/selection_manager.hpp"
 #include "robot/hmi/types.hpp"
+#include "robot/lift/lift_control.hpp"
 #include "robot/manual/heading_assist.hpp"
 #include "robot/manual/input_shaping.hpp"
 #include "robot/manual/manual_drive.hpp"

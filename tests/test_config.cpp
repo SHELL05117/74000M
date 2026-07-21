@@ -22,7 +22,7 @@ robot::RobotConfig validConfig() {
 
 ROBOT_TEST("1690X commissioning profile is structurally valid but locked") {
   const auto config = robot::makeOfflineRobotConfig();
-  const auto check = robot::validateConfig(config, "1690X", 2);
+  const auto check = robot::validateConfig(config, "1690X", 3);
   ROBOT_REQUIRE(check.structurally_valid);
   ROBOT_REQUIRE(!check.output_unlock_allowed);
   ROBOT_REQUIRE((check.fault_bits & robot::kHardwareUnverified) != 0);
@@ -32,6 +32,7 @@ ROBOT_TEST("1690X commissioning profile is structurally valid but locked") {
   ROBOT_REQUIRE(
       robot::boundedStringEqual(config.identity.robot_id, "1690X", 16));
   ROBOT_REQUIRE(!config.hardware.imu.installed);
+  ROBOT_REQUIRE(config.hardware.lift.installed);
 }
 
 ROBOT_TEST("offline profile preserves supplied six-motor drivetrain facts") {
@@ -61,6 +62,16 @@ ROBOT_TEST("offline profile preserves supplied six-motor drivetrain facts") {
   ROBOT_REQUIRE(config.hardware.right[2].cartridge_rpm == 600);
   ROBOT_REQUIRE(config.hardware.right[2].reversed);
 
+  ROBOT_REQUIRE(config.hardware.lift.motors[0].smart_port == 14);
+  ROBOT_REQUIRE(config.hardware.lift.motors[0].cartridge_rpm == 200);
+  ROBOT_REQUIRE(config.hardware.lift.motors[0].reversed);
+  ROBOT_REQUIRE(config.hardware.lift.motors[1].smart_port == 5);
+  ROBOT_REQUIRE(config.hardware.lift.motors[1].cartridge_rpm == 200);
+  ROBOT_REQUIRE(!config.hardware.lift.motors[1].reversed);
+  ROBOT_REQUIRE_NEAR(config.hardware.lift.minimum_position_rad, 0.0, 0.0);
+  ROBOT_REQUIRE_NEAR(config.hardware.lift.maximum_position_rad,
+                     robot::units::degreesToRadians(830.0), 1e-12);
+
   for (const auto& motor : config.hardware.left)
     ROBOT_REQUIRE_NEAR(robot::nominalWheelRpm(motor), 450.0, 1e-9);
   for (const auto& motor : config.hardware.right)
@@ -74,12 +85,12 @@ ROBOT_TEST("offline profile preserves supplied six-motor drivetrain facts") {
 
 ROBOT_TEST("missing odometry calibration is allowed only while pose is locked") {
   auto config = robot::make1690XCommissioningConfig();
-  auto locked = robot::validateConfig(config, "1690X", 2);
+  auto locked = robot::validateConfig(config, "1690X", 3);
   ROBOT_REQUIRE(locked.structurally_valid);
   config.capabilities.hardware_output = true;
   config.capabilities.pose_good = true;
   config.hardware_verification = robot::VerificationLevel::HILValidated;
-  const auto unlocked = robot::validateConfig(config, "1690X", 2);
+  const auto unlocked = robot::validateConfig(config, "1690X", 3);
   ROBOT_REQUIRE((unlocked.fault_bits & robot::kBadCalibration) != 0);
 }
 

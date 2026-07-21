@@ -84,6 +84,10 @@ class StartupSelfCheck {
 
     observeMotors(raw.left.motor, hardware_.left, 0);
     observeMotors(raw.right.motor, hardware_.right, kMotorsPerSide);
+    if (hardware_.lift.installed) {
+      observeMotors(raw.lift, hardware_.lift.motors,
+                    2 * kMotorsPerSide);
+    }
     battery_seen_ = battery_seen_ || validScalar(raw.battery_V);
 
     if (hardware_.imu.installed &&
@@ -161,8 +165,12 @@ class StartupSelfCheck {
   }
 
   bool allRequiredDevicesObserved() const noexcept {
-    for (const bool seen : motor_seen_)
-      if (!seen) return false;
+    for (std::size_t i = 0; i < 2 * kMotorsPerSide; ++i)
+      if (!motor_seen_[i]) return false;
+    if (hardware_.lift.installed) {
+      for (std::size_t i = 2 * kMotorsPerSide; i < motor_seen_.size(); ++i)
+        if (!motor_seen_[i]) return false;
+    }
     if (!battery_seen_) return false;
     if (hardware_.imu.installed && !imu_seen_) return false;
     if (hardware_.parallel_rotation.installed && !tracking_seen_[0])
@@ -173,8 +181,11 @@ class StartupSelfCheck {
   }
 
   void finalizeFaults() noexcept {
-    for (const bool seen : motor_seen_) {
-      if (!seen) {
+    const std::size_t required_motors =
+        2 * kMotorsPerSide +
+        (hardware_.lift.installed ? kLiftMotorCount : 0);
+    for (std::size_t i = 0; i < required_motors; ++i) {
+      if (!motor_seen_[i]) {
         status_.fault_bits |= kStartupMotorMissing;
         break;
       }
@@ -193,7 +204,7 @@ class StartupSelfCheck {
   HardwareConfig hardware_{};
   StartupSelfCheckStatus status_{};
   TimeUs start_time_us_{};
-  std::array<bool, 2 * kMotorsPerSide> motor_seen_{};
+  std::array<bool, 2 * kMotorsPerSide + kLiftMotorCount> motor_seen_{};
   std::array<bool, 2> tracking_seen_{};
   bool battery_seen_{};
   bool imu_seen_{};

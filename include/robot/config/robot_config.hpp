@@ -7,11 +7,13 @@
 
 #include "robot/config/robot_identity.hpp"
 #include "robot/core/frame.hpp"
+#include "robot/core/units.hpp"
 #include "robot/ui/registry_ids.hpp"
 
 namespace robot {
 
 constexpr std::size_t kMotorsPerSide = 3;
+constexpr std::size_t kLiftMotorCount = 2;
 
 struct MotorPortConfig {
   std::int8_t smart_port{};
@@ -55,12 +57,22 @@ struct RotationSensorConfig {
   double offset_m{};
 };
 
+struct LiftHardwareConfig {
+  bool installed{};
+  std::array<MotorPortConfig, kLiftMotorCount> motors{};
+  // Normalized motor output-shaft position after startup zeroing at the
+  // physical lower stop. Positive position raises the Lift.
+  double minimum_position_rad{};
+  double maximum_position_rad{};
+};
+
 struct HardwareConfig {
   std::array<MotorPortConfig, kMotorsPerSide> left{};
   std::array<MotorPortConfig, kMotorsPerSide> right{};
   ImuConfig imu{};
   RotationSensorConfig parallel_rotation{};
   RotationSensorConfig lateral_rotation{};
+  LiftHardwareConfig lift{};
 };
 
 struct GeometryConfig {
@@ -123,6 +135,7 @@ enum ConfigFault : std::uint32_t {
   kCapabilityViolation = 1u << 11,
   kBadRoute = 1u << 12,
   kBadTransmission = 1u << 13,
+  kBadLift = 1u << 14,
 };
 
 struct ConfigCheck {
@@ -203,6 +216,20 @@ inline ConfigCheck validateConfig(const RobotConfig& config,
     if (!finitePositive(motor.motor_rev_per_wheel_rev))
       result.fault_bits |= kBadTransmission;
   }
+  if (config.hardware.lift.installed) {
+    for (const auto& motor : config.hardware.lift.motors) {
+      claim_port(static_cast<std::uint8_t>(motor.smart_port));
+      if (!knownCartridge(motor.cartridge_rpm))
+        result.fault_bits |= kBadCartridge;
+    }
+    if (!std::isfinite(config.hardware.lift.minimum_position_rad) ||
+        !std::isfinite(config.hardware.lift.maximum_position_rad) ||
+        config.hardware.lift.minimum_position_rad < 0.0 ||
+        config.hardware.lift.maximum_position_rad <=
+            config.hardware.lift.minimum_position_rad) {
+      result.fault_bits |= kBadLift;
+    }
+  }
   if (config.hardware.imu.installed)
     claim_port(config.hardware.imu.smart_port);
   if (config.hardware.parallel_rotation.installed)
@@ -266,7 +293,7 @@ inline RobotConfig make1690XCommissioningConfig() {
       (12.0 / 36.0) * (48.0 / 36.0);
 
   config.identity = {"1690X", "1690X", "1690X SAMPLE", "commission", 0,
-                     2, 0};
+                     3, 0};
   config.hardware.left = {{
       motorFromReversedFlag(3, 600, true,
                             kRatio6MotorRevPerWheelRev),   // Front: reverse
@@ -283,6 +310,12 @@ inline RobotConfig make1690XCommissioningConfig() {
       motorFromReversedFlag(11, 600, true,
                             kRatio6MotorRevPerWheelRev),   // Rear: reverse
   }};
+  config.hardware.lift = {
+      true,
+      {{motorFromReversedFlag(14, 200, true),
+        motorFromReversedFlag(5, 200, false)}},
+      0.0,
+      units::degreesToRadians(830.0)};
   config.hardware.imu = {false, 0};
   config.geometry = {0.06985, 0.1524};
   // CAD/nominal values are not promoted to fitted odometry calibration.

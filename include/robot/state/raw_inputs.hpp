@@ -52,6 +52,7 @@ struct RawDriveInputs {
   TimeUs acquisition_end_us{};
   MotorSideRaw<kMotorsPerSide> left;
   MotorSideRaw<kMotorsPerSide> right;
+  std::array<MotorSample, kLiftMotorCount> lift{};
   std::array<TrackingWheelRaw, kMaxTrackingWheels> tracking{};
   ImuRaw imu;
   ScalarSample battery_V;

@@ -28,7 +28,7 @@
 namespace {
 
 constexpr char kExpectedRobotId[] = "1690X";
-constexpr std::uint32_t kExpectedConfigSchema = 2;
+constexpr std::uint32_t kExpectedConfigSchema = 3;
 constexpr std::uint32_t kStartupSelfCheckPollMs = 10;
 constexpr std::uint32_t kControllerHmiPeriodMs = 100;
 constexpr std::uint32_t kTelemetryPeriodMs = 5;
@@ -54,7 +54,9 @@ class RobotRuntime {
         timing_({config_.runtime.nominal_period_s,
                  config_.runtime.min_math_dt_s,
                  config_.runtime.max_math_dt_s, 0.015}),
-        cycle_(robot::make1690XCommissioningCurvatureConfig()),
+        cycle_(robot::make1690XCommissioningCurvatureConfig(),
+               robot::make1690XLiftCommissioningConfig(),
+               config_.hardware.lift),
         recording_metadata_(robot::makeRecordingMetadata(
             config_, clock_.nowUs(), ROBOT_SOURCE_COMMIT,
             ROBOT_BUILD_DIRTY != 0)),
@@ -259,9 +261,9 @@ extern "C" void initialize() {
   } else {
     pros::lcd::set_text(3, "READY: SELF CHECK OK");
   }
-  pros::lcd::set_text(4, "ALL STOPS = COAST");
-  pros::lcd::set_text(5, "LEFT Y/X CURVATURE");
-  pros::lcd::set_text(6, "LEFT COAST / HOLD Y REC");
+  pros::lcd::set_text(4, "DRIVE COAST / LIFT HOLD");
+  pros::lcd::set_text(5, "LEFT Y/X DRIVE; RIGHT Y LIFT");
+  pros::lcd::set_text(6, "BOOT LIFT AT LOWER STOP");
 }
 
 extern "C" void disabled() {

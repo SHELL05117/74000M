@@ -6,6 +6,7 @@
 #include "robot/commands/drive_request_arbiter.hpp"
 #include "robot/commands/request_sink.hpp"
 #include "robot/drive/safety_gate.hpp"
+#include "robot/lift/lift_control.hpp"
 #include "robot/manual/input_shaping.hpp"
 #include "robot/runtime/control_loop.hpp"
 
@@ -279,7 +280,7 @@ class CommissioningDriveLeaseCommand final : public Command {
  public:
   CommandId id() const noexcept override { return 0x1690; }
   RequirementMask requirements() const noexcept override {
-    return Requirement::kDrivetrain;
+    return Requirement::kDrivetrain | Requirement::kLift;
   }
   bool allowedInMode(CompetitionMode mode) const noexcept override {
     return mode == CompetitionMode::Test;
@@ -311,11 +312,18 @@ class CommissioningDriveLeaseCommand final : public Command {
 // false; only a bounded RequestSource::Test voltage payload is enabled here.
 class CommissioningControlCycle final : public ControlCycle {
  public:
-  explicit CommissioningControlCycle(CommissioningCurvatureConfig config)
+  explicit CommissioningControlCycle(
+      CommissioningCurvatureConfig config,
+      LiftCommissioningConfig lift_config =
+          make1690XLiftCommissioningConfig(),
+      LiftHardwareConfig lift_hardware =
+          make1690XCommissioningConfig().hardware.lift)
       : config_(config),
         mapper_(config),
         arbiter_({config.request_ttl_us}),
-        safety_gate_(makeSafetyConfig(config)) {
+        safety_gate_(makeSafetyConfig(config)),
+        lift_mapper_(lift_config, lift_hardware),
+        lift_gate_(lift_config, lift_hardware) {
     capabilities_.controlled_test_voltage = true;
   }
 
@@ -332,7 +340,7 @@ class CommissioningControlCycle final : public ControlCycle {
   }
 
   ActuatorFrame update(const FrameHeader& header, const ModeSnapshot& mode,
-                       const RawDriveInputs&,
+                       const RawDriveInputs& raw,
                        const ControllerSnapshot& controller,
                        const TimingSample& timing) override {
     state_.h = header;
@@ -382,6 +390,14 @@ class CommissioningControlCycle final : public ControlCycle {
                                      timing.math_dt_s, 1.0,
                                      capabilities_};
     last_actuator_ = safety_gate_.apply(selected_request, gate_input);
+    LiftRequest lift_request{};
+    const bool lift_request_valid = lift_mapper_.update(
+        header, mode, controller, lease_command_.owner(), lift_request);
+    last_lift_ = lift_gate_.apply(
+        lift_request_valid ? &lift_request : nullptr, raw.lift, mode,
+        header.time_us);
+    last_actuator_.lift_V = last_lift_.voltage_V;
+    last_actuator_.lift_zero_behavior = last_lift_.zero_behavior;
     return last_actuator_;
   }
 
@@ -462,16 +478,20 @@ class CommissioningControlCycle final : public ControlCycle {
 
   CommissioningCurvatureConfig config_{};
   CommissioningCurvatureMapper mapper_;
-  StaticScheduler<1> scheduler_{Requirement::kDrivetrain};
+  StaticScheduler<1> scheduler_{Requirement::kDrivetrain |
+                                Requirement::kLift};
   CommissioningDriveLeaseCommand lease_command_{};
   DriveRequestSink sink_{};
   DriveRequestArbiter arbiter_;
   SafetyGate safety_gate_;
+  LiftManualMapper lift_mapper_;
+  LiftSafetyGate lift_gate_;
   DriveCapabilities capabilities_{};
   RobotState state_{};
   CommissioningCurvatureResult last_mapped_{};
   ArbitrationResult last_arbitration_{};
   ActuatorFrame last_actuator_{};
+  LiftControlResult last_lift_{};
   std::uint32_t received_global_event_bits_{};
   std::uint32_t consumed_global_event_bits_{};
   bool last_request_present_{};

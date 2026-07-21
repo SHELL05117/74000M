@@ -9,7 +9,7 @@
 # HILValidated or better.
 
 identity:
-  schema_version: 2
+  schema_version: 3
   calibration_revision: 0
   team_number: "1690X"
   robot_id: "1690X"
@@ -40,6 +40,13 @@ hardware:
     - { position: front,  smart_port: 13, reversed: false, cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # 6:1; 36T -> 48T
     - { position: middle, smart_port: 12, reversed: false, cartridge_rpm: 200, motor_rev_per_wheel_rev: 0.4444444444444444 } # 18:1; 36T -> 12T, coaxial 36T -> 48T
     - { position: rear,   smart_port: 11, reversed: true,  cartridge_rpm: 600, motor_rev_per_wheel_rev: 1.3333333333333333 } # 6:1; 36T -> 48T
+  lift:
+    installed: true
+    startup_reference: "operator places mechanism at physical lower stop; both integrated encoders tare to 0 deg during initialization"
+    travel_motor_deg: { minimum: 0.0, physical_maximum: 830.0, software_command_ceiling: 820.0 }
+    motors:
+      - { side: left,  smart_port: 14, reversed: true,  cartridge_rpm: 200 }
+      - { side: right, smart_port: 5,  reversed: false, cartridge_rpm: 200 }
   imu:
     installed: false
     smart_port: null
@@ -87,7 +94,7 @@ commissioning_test:
   enabled_in_non_field_opcontrol: true
   tuning_revision: 5
   maximum_voltage_V: 12.0
-  controller_mapping: "Left Y throttle; Left X curvature; single-stick Curvature"
+  controller_mapping: "Left Y throttle; Left X curvature; Right Y (Axis2) Lift up/down"
   throttle_cubic_weight: 0.0
   turn_cubic_weight: 0.15
   curvature_gain: 1.0
@@ -109,3 +116,11 @@ commissioning_test:
   output_fall_V_per_s: 1200.0
   nominal_full_scale_ramp_s: 0.01
   tuning_status: "Linear throttle and one-frame full-scale response are aggressive HIL candidates; retest required"
+  lift_axis_deadband: 0.06
+  lift_axis_cubic_weight: 0.0
+  lift_maximum_voltage_V: 12.0
+  lift_upper_guard_deg: 10.0
+  lift_slowdown_zone_deg: 90.0
+  lift_maximum_encoder_disagreement_deg: 25.0
+  lift_neutral_and_fault_behavior: "Hold"
+  lift_tuning_status: "Port/polarity/travel supplied by operator; zeroing assumption, endpoint margin, slowdown and disagreement thresholds require HIL validation"
