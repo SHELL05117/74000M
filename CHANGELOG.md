@@ -4,6 +4,8 @@ This file records implementation commits in simple English. Dedicated `chore(log
 
 ## 2026-07-21
 
+- ab9856abea2163995c5c13fcc78f83f7ffd8a44f — Removed local paths from the interface and added one-click macOS launch and app build workflows.
+
 - 8c5dc674ba6e593d1ef3e80acd208f26a4dcf137 - Remapped the six drivetrain motor ports, directions, positions, and 6:1/18:1 cartridges.
 
 - 49c1dac9a159462273a97b7fe0d74c8579ee786e — Refreshed project metadata, documentation, frontend design guidance, and local artifact ignore rules.
