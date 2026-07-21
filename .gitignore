@@ -30,3 +30,16 @@ statusmonitor/pc/dist/
 statusmonitor/pc/*.spec
 statusmonitor/pc/**/__pycache__/
 statusmonitor/pc/**/*.egg-info/
+
+# Local flight recordings copied from TF cards (never commit)
+**/FLIGHT/
+**/*.V5L
+**/*.v5l
+**/DATA.TMP
+**/DATA.tmp
+
+# Synthetic fixtures intentionally authored for automated tests are allowed
+!tests/fixtures/**/*.V5L
+!tests/fixtures/**/*.v5l
+!statusmonitor/pc/tests/fixtures/**/*.V5L
+!statusmonitor/pc/tests/fixtures/**/*.v5l
