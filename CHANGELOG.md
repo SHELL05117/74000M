@@ -4,6 +4,8 @@ This file records implementation commits in simple English. Dedicated `chore(log
 
 ## 2026-07-21
 
+- fded04620caca5f3bad4e22c3e8cffd957930207 - Reverted the selectable split-stick Curvature controls and restored the original left-stick Curvature mapping.
+
 - 7c89b220daa2702eaf0b8642f80fea28fc572e8f - Added selectable single-stick and split-stick Curvature controls, defaulting to Left Y throttle and Right X steering.
 
 - ab9856abea2163995c5c13fcc78f83f7ffd8a44f — Removed local paths from the interface and added one-click macOS launch and app build workflows.
