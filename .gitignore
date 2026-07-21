@@ -30,6 +30,10 @@ statusmonitor/pc/dist/
 statusmonitor/pc/*.spec
 statusmonitor/pc/**/__pycache__/
 statusmonitor/pc/**/*.egg-info/
+statusmonitor/pc/.qa_shots/
+
+# Local orchestration notes
+plan.md
 
 # Local flight recordings copied from TF cards (never commit)
 **/FLIGHT/

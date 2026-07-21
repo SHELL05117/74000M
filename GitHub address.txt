@@ -1,0 +1,2 @@
+Https: https://github.com/SHELL05117/74000M.git
+SSH: git@github.com:SHELL05117/74000M.git

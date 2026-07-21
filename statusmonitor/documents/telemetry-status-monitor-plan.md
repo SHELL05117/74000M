@@ -10,15 +10,15 @@
 
 ## 1. 文档信息
 
-| 项目 | 内容 |
-|---|---|
-| 文档名称 | 74000M 遥测状态监控与记录分析系统策划案 |
-| 作者 | Kimi K3 |
-| 日期 | 2026-07-20 |
-| 项目 | 74000M / VEX0713 |
-| 版本 | v1.0 |
-| 状态 | 草案，M0 里程碑开始前冻结为 v1.1 |
-| 适用范围 | 机器人端遥测固件扩展 + PC 端记录/分析工具链 + 比赛归档流程 |
+| 项目   | 内容                                                     |
+| ---- | ------------------------------------------------------ |
+| 文档名称 | 74000M 遥测状态监控与记录分析系统策划案                                |
+| 作者   | Kimi K3                                                |
+| 日期   | 2026-07-20                                             |
+| 项目   | 74000M / VEX0713                                       |
+| 版本   | v1.0                                                   |
+| 状态   | 草案，M0 里程碑开始前冻结为 v1.1                                   |
+| 适用范围 | 机器人端遥测固件扩展 + PC 端记录/分析工具链 + 比赛归档流程                     |
 | 阅读顺序 | 第 2–4 章为共识基础；第 5–7 章为实施方案；第 8–9 章为执行清单；第 10–11 章为边界与出处 |
 
 **术语约定**
@@ -53,11 +53,11 @@
 
 ### 2.3 目标分层
 
-| 层级 | 目标 | 对应章节 |
-|---|---|---|
-| 核心（P0） | USB 实时遥测 + SD 全速落盘 + 完整性报告 + 会话身份绑定归档 | §5、§6、§7.1、§7.2 |
-| 主要（P1） | 实时仪表盘（轨迹/v/a/jerk/PID 曲线）、离线分析、SysId 拟合闭环 | §7.2、§7.3 |
-| 扩展（P2） | FFT 频谱分析、傅里叶级数轨迹拟合、滤波器对比实验、AdvantageScope CSV 导出、日志重放 | §7.4 |
+| 层级     | 目标                                                    | 对应章节            |
+| ------ | ----------------------------------------------------- | --------------- |
+| 核心（P0） | USB 实时遥测 + SD 全速落盘 + 完整性报告 + 会话身份绑定归档                 | §5、§6、§7.1、§7.2 |
+| 主要（P1） | 实时仪表盘（轨迹/v/a/jerk/PID 曲线）、离线分析、SysId 拟合闭环             | §7.2、§7.3       |
+| 扩展（P2） | FFT 频谱分析、傅里叶级数轨迹拟合、滤波器对比实验、AdvantageScope CSV 导出、日志重放 | §7.4            |
 
 ---
 
@@ -65,13 +65,13 @@
 
 ### 3.1 V5 Brain 硬件规格（已核实）
 
-| 事实 | 数值 | 来源 |
-|---|---|---|
-| 内部 SoC | Xilinx Zynq XC7Z010（FPGA + 双核 Cortex-A9） | https://snikolaj.com/2023/02/25/vex-robotics-v5-brain-analysis/ |
-| VEXos 处理器 | 1× Cortex-A9 @ 667 MHz + 2× Cortex-M0 @ 32 MHz + 1× FPGA | https://www.vexrobotics.com/276-4810.html ；https://kb.vex.com/hc/en-us/articles/360060662352-Understanding-the-V5-Robot-Brain |
-| 用户处理器 | 1× Cortex-A9（标称 1333 MIPS，官方按单核计）；VEXos 与用户程序各占一个 A9 核 | 同 VEX KB |
-| RAM / Flash | 128 MB / 32 MB，8 个用户程序槽，SD 卡扩展（FAT32） | 同 VEX KB |
-| USB | USB 2.0 High Speed（480 Mbit/s） | 同 VEX KB |
+| 事实          | 数值                                                       | 来源                                                                                                                            |
+| ----------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 内部 SoC      | Xilinx Zynq XC7Z010（FPGA + 双核 Cortex-A9）                 | https://snikolaj.com/2023/02/25/vex-robotics-v5-brain-analysis/                                                               |
+| VEXos 处理器   | 1× Cortex-A9 @ 667 MHz + 2× Cortex-M0 @ 32 MHz + 1× FPGA | https://www.vexrobotics.com/276-4810.html ；https://kb.vex.com/hc/en-us/articles/360060662352-Understanding-the-V5-Robot-Brain |
+| 用户处理器       | 1× Cortex-A9（标称 1333 MIPS，官方按单核计）；VEXos 与用户程序各占一个 A9 核   | 同 VEX KB                                                                                                                      |
+| RAM / Flash | 128 MB / 32 MB，8 个用户程序槽，SD 卡扩展（FAT32）                    | 同 VEX KB                                                                                                                      |
+| USB         | USB 2.0 High Speed（480 Mbit/s）                           | 同 VEX KB                                                                                                                      |
 
 ### 3.2 USB 串口通道（已核实）
 
@@ -127,27 +127,27 @@ PC→USB→手柄→VEXnet→Brain 的连接确实存在（无线下载用），
 
 ### 4.1 已有资产（已核实，路径相对项目根 `C:\Users\alexh\Documents\override\74000M\74000M`）
 
-| 资产 | 位置 | 说明 |
-|---|---|---|
-| 定长 POD LogFrame | `include/robot/telemetry/log_frame.hpp` | magic `0x374D3030`（"7M00"）、schema 1.0、`static_assert(std::is_trivially_copyable_v<LogFrame>)` 已锁定。字段：LogHeader + 左右各 3 电机样本（位置/速度/电流/温度/电压/故障）+ IMU + battery_V + 位姿(x,y,θ)/机体速度(vx,vy,ω)/质量 + RequestLog + ActuatorLog（三级电压/derate/写入结果）+ TimingLog（raw_dt/math_dt/exec/jitter/age/overrun/ring_depth/log_dropped_total）+ FaultLog。**帧长约 712 字节（由字段推算，待 static_assert 锁定确认）→ 100 Hz 全速原始码率约 71 KB/s（推算值）** |
-| 无锁 SPSC 环 | `include/robot/telemetry/spsc_ring.hpp` | 满环丢新帧并计数，语义符合 docs2/12。**但产品级实例不存在（只有测试实例）** |
-| 遥测任务骨架 | `include/robot/telemetry/telemetry_task.hpp` | `TelemetrySink` 抽象接口（`write(frames,count)->bool`）+ `TelemetryDrain` 批量出队。**无任何 sink 实现，无 PROS 遥测任务** |
-| 完整性跟踪 | `include/robot/telemetry/integrity.hpp` | `LogIntegrityTracker`（sequence 缺口/时间回退/epoch 回退），PC 端可复用同款逻辑 |
-| 重放 | `include/robot/telemetry/replay.hpp` | `RawInputReplay` |
-| SysId 激励发生器 | `include/robot/calibration/characterization_runner.hpp` | Quasistatic/Dynamic × Forward/Reverse，安全闸门齐全 |
-| SysId 拟合 | `include/robot/calibration/calibration_tools.hpp` | `SysIdSample` + `fitFeedforward()`（kS/kV/kA 最小二乘，训练/验证分离），**header-only 平台无关，PC 端可直接复用或移植** |
+| 资产              | 位置                                                      | 说明                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 定长 POD LogFrame | `include/robot/telemetry/log_frame.hpp`                 | magic `0x374D3030`（"7M00"）、schema 1.0、`static_assert(std::is_trivially_copyable_v<LogFrame>)` 已锁定。字段：LogHeader + 左右各 3 电机样本（位置/速度/电流/温度/电压/故障）+ IMU + battery_V + 位姿(x,y,θ)/机体速度(vx,vy,ω)/质量 + RequestLog + ActuatorLog（三级电压/derate/写入结果）+ TimingLog（raw_dt/math_dt/exec/jitter/age/overrun/ring_depth/log_dropped_total）+ FaultLog。**帧长约 712 字节（由字段推算，待 static_assert 锁定确认）→ 100 Hz 全速原始码率约 71 KB/s（推算值）** |
+| 无锁 SPSC 环       | `include/robot/telemetry/spsc_ring.hpp`                 | 满环丢新帧并计数，语义符合 docs2/12。**但产品级实例不存在（只有测试实例）**                                                                                                                                                                                                                                                                                                                                                                |
+| 遥测任务骨架          | `include/robot/telemetry/telemetry_task.hpp`            | `TelemetrySink` 抽象接口（`write(frames,count)->bool`）+ `TelemetryDrain` 批量出队。**无任何 sink 实现，无 PROS 遥测任务**                                                                                                                                                                                                                                                                                                        |
+| 完整性跟踪           | `include/robot/telemetry/integrity.hpp`                 | `LogIntegrityTracker`（sequence 缺口/时间回退/epoch 回退），PC 端可复用同款逻辑                                                                                                                                                                                                                                                                                                                                                |
+| 重放              | `include/robot/telemetry/replay.hpp`                    | `RawInputReplay`                                                                                                                                                                                                                                                                                                                                                                                            |
+| SysId 激励发生器     | `include/robot/calibration/characterization_runner.hpp` | Quasistatic/Dynamic × Forward/Reverse，安全闸门齐全                                                                                                                                                                                                                                                                                                                                                                |
+| SysId 拟合        | `include/robot/calibration/calibration_tools.hpp`       | `SysIdSample` + `fitFeedforward()`（kS/kV/kA 最小二乘，训练/验证分离），**header-only 平台无关，PC 端可直接复用或移植**                                                                                                                                                                                                                                                                                                                 |
 
 ### 4.2 缺口清单（已核实）
 
-| 编号 | 缺口 | 影响 | 解决阶段 |
-|---|---|---|---|
-| G1 | `src/main.cpp` 无遥测接线（无产品级 SPSC 环实例、无 TelemetryTask 创建） | 遥测链路不存在 | M0/M1 |
-| G2 | 全库无 serial/printf/SD/文件 I/O 代码 | 无任何 sink 出口 | M1/M2 |
-| G3 | LogFrame 无 PID p/i/d/ff 分量字段（PidResult 在控制器出口存在） | 无法绘制 P/I/D 分量曲线 | M2 前置（schema 1.1） |
-| G4 | 当前 cycle 不跑里程计 | 位姿字段暂为空/低质量 | 依赖板块 8 解锁 |
-| G5 | 帧长 712 B 为推算值，未用 `static_assert(sizeof(LogFrame)==…)` 锁定 | 协议帧长不确定 | M0 |
-| G6 | PROS stdout 吞吐上限未知 | 实时流码率无法预算 | M0 第一项实测 |
-| G7 | PC 端工具链不存在 | 记录/分析/归档无从谈起 | M1–M4 |
+| 编号  | 缺口                                                       | 影响              | 解决阶段              |
+| --- | -------------------------------------------------------- | --------------- | ----------------- |
+| G1  | `src/main.cpp` 无遥测接线（无产品级 SPSC 环实例、无 TelemetryTask 创建）   | 遥测链路不存在         | M0/M1             |
+| G2  | 全库无 serial/printf/SD/文件 I/O 代码                           | 无任何 sink 出口     | M1/M2             |
+| G3  | LogFrame 无 PID p/i/d/ff 分量字段（PidResult 在控制器出口存在）         | 无法绘制 P/I/D 分量曲线 | M2 前置（schema 1.1） |
+| G4  | 当前 cycle 不跑里程计                                           | 位姿字段暂为空/低质量     | 依赖板块 8 解锁         |
+| G5  | 帧长 712 B 为推算值，未用 `static_assert(sizeof(LogFrame)==…)` 锁定 | 协议帧长不确定         | M0                |
+| G6  | PROS stdout 吞吐上限未知                                       | 实时流码率无法预算       | M0 第一项实测          |
+| G7  | PC 端工具链不存在                                               | 记录/分析/归档无从谈起    | M1–M4             |
 
 ---
 
@@ -242,10 +242,10 @@ USB 线帧 (COBS 定界, 0x00 为帧界):
 
 【设计决策】schema 1.x 定义两类线帧：
 
-| 帧类型 | 频率 | 内容 | 去向 |
-|---|---|---|---|
-| FULL（全量帧） | 100 Hz | 完整 LogFrame（712 B 级） | 仅 SD；USB 仅在 M0 实测证明带宽足够时分频开启 |
-| SUMMARY（摘要帧） | 20–30 Hz | 位姿/速度/电压子集 + PID 分量 + 时序统计 + 故障位 + log_dropped_total（目标 ≤ 256 B） | USB 实时流（也可混入 SD） |
+| 帧类型          | 频率       | 内容                                                               | 去向                           |
+| ------------ | -------- | ---------------------------------------------------------------- | ---------------------------- |
+| FULL（全量帧）    | 100 Hz   | 完整 LogFrame（712 B 级）                                             | 仅 SD；USB 仅在 M0 实测证明带宽足够时分频开启 |
+| SUMMARY（摘要帧） | 20–30 Hz | 位姿/速度/电压子集 + PID 分量 + 时序统计 + 故障位 + log_dropped_total（目标 ≤ 256 B） | USB 实时流（也可混入 SD）             |
 
 ### 6.3 码率预算
 
@@ -274,27 +274,31 @@ USB 线帧 (COBS 定界, 0x00 为帧界):
 **功能清单**：
 
 1. **身份档案（Profile）CRUD**：
+   
    - 新建/选择/编辑/复制档案；档案持久化为 `profiles.json`（PC 端用户目录或工具目录）。
+   
    - 档案字段（【设计决策】，对齐 docs2/12 §4.1 metadata 清单）：
-
-     | 字段 | 必填 | 说明 |
-     |---|---|---|
-     | team_number | 是 | 队号，如 `74000M` |
-     | operator | 是 | 操作员姓名/代号 |
-     | robot_id | 是 | 机器人 ID（须与固件 `RobotIdentity` 一致，采集时交叉校验） |
-     | date | 自动 | 会话日期（自动生成，可改） |
-     | battery_id | 是 | 电池编号 |
-     | field_condition | 否 | 场地/工况（练习场/比赛场/垫子批次等） |
-     | tire_condition | 否 | 轮胎状态（docs2/12 §4.1 要求项） |
-     | ambient_temp | 否 | 场地温度（docs2/12 §4.1 要求项） |
-     | notes | 否 | 备注 |
+     
+     | 字段              | 必填  | 说明                                      |
+     | --------------- | --- | --------------------------------------- |
+     | team_number     | 是   | 队号，如 `74000M`                           |
+     | operator        | 是   | 操作员姓名/代号                                |
+     | robot_id        | 是   | 机器人 ID（须与固件 `RobotIdentity` 一致，采集时交叉校验） |
+     | date            | 自动  | 会话日期（自动生成，可改）                           |
+     | battery_id      | 是   | 电池编号                                    |
+     | field_condition | 否   | 场地/工况（练习场/比赛场/垫子批次等）                    |
+     | tire_condition  | 否   | 轮胎状态（docs2/12 §4.1 要求项）                 |
+     | ambient_temp    | 否   | 场地温度（docs2/12 §4.1 要求项）                 |
+     | notes           | 否   | 备注                                      |
 
 2. **采集会话（Run）绑定**：
+   
    - 每次开始录制必须选择一个档案 + 填写 `test_case_id`（如 `sysid_qs_fwd_left`、`pid_step_1m`）；
    - 自动生成 `run_id`（【设计决策】：`YYYYMMDD-HHmmss_<test_case_id>` 短哈希），并写入机器人端 run 开始/结束标记帧（若固件支持）或仅由 PC 侧按录制窗口切分；
    - 落盘 `metadata.json`：档案全字段 + 固件上报的 run metadata（software_commit + dirty flag、VEXos/PROS 版本、schema、config_hash、轮/齿比/质量/重心、电池起止电压、电机起止温度）——固件上报项在 schema 1.1 中以 RUN_META 帧下发，未接入前 PC 侧留空并标注「待固件补充」。
 
 3. **归档规则**（docs2/12 §4.1 强制）：
+   
    - 目录结构：`artifacts/<date>/<robot_id>/<run_id>/`（§5.2）；
    - `fast_log.bin` 录制完成后设为只读；**禁止覆盖已有 run_id 目录**，重名即报错要求换 test_case_id；
    - `operator_notes.md` 提供录制结束后的快速备注入口（模板预填档案字段）。
@@ -310,14 +314,14 @@ USB 线帧 (COBS 定界, 0x00 为帧界):
 
 【设计决策】技术形态：Python + pyqtgraph 单窗口多页签，串口后台线程接收、GUI 线程 30 Hz 刷新。
 
-| 页签 | 内容 | 数据来源帧 | 备注 |
-|---|---|---|---|
-| 轨迹 | 二维 x-y 图，叠加目标路径（若有轨迹跟随）；可选场地图底图 | 位姿字段 | G4 未解锁前显示「位姿不可用」占位 |
-| 运动学 | v-t、a-t、jerk-t 三曲线 | 机体速度(vx,vy,ω) + 离线差分 | **jerk 曲线固定叠加噪声警告条**（docs2/12 §8：jerk 文档未覆盖、注意加速度噪声）；提供滤波选项（无/savgol/移动平均）并排对比 |
-| PID | 目标 vs 实际位置、输出 u、积分项、P/I/D/ff 分量、滤波后速度 | RequestLog + schema 1.1 PID 分量字段 | 对齐 docs/10 §2「四条最有诊断力曲线」；**P/I/D 分量依赖 G3 修复（schema 1.1）** |
-| 电机健康 | 6 电机温度/电流/电压曲线 + derate 状态 | 电机样本 + ActuatorLog | 超温/降额阈值线标注 |
-| 实时性 | dt 抖动直方图、raw_dt/math_dt/exec 时序、overrun/ring_depth/log_dropped_total 计数 | TimingLog | p50/p95/p99 实时统计 |
-| 摘要 | 每条运动结束自动生成一行 `SETTLED t=… err=… ov=… i_pk=… sat=…`（docs/10 §3.2 格式） | 全帧滑窗 | **预警规则（docs/10 §3.2）**：i_pk 逼近 i_max → 黄色；sat>60% → 橙色；ov 变号 → 红色 |
+| 页签   | 内容                                                                      | 数据来源帧                            | 备注                                                                             |
+| ---- | ----------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------ |
+| 轨迹   | 二维 x-y 图，叠加目标路径（若有轨迹跟随）；可选场地图底图                                         | 位姿字段                             | G4 未解锁前显示「位姿不可用」占位                                                             |
+| 运动学  | v-t、a-t、jerk-t 三曲线                                                      | 机体速度(vx,vy,ω) + 离线差分             | **jerk 曲线固定叠加噪声警告条**（docs2/12 §8：jerk 文档未覆盖、注意加速度噪声）；提供滤波选项（无/savgol/移动平均）并排对比 |
+| PID  | 目标 vs 实际位置、输出 u、积分项、P/I/D/ff 分量、滤波后速度                                   | RequestLog + schema 1.1 PID 分量字段 | 对齐 docs/10 §2「四条最有诊断力曲线」；**P/I/D 分量依赖 G3 修复（schema 1.1）**                      |
+| 电机健康 | 6 电机温度/电流/电压曲线 + derate 状态                                              | 电机样本 + ActuatorLog               | 超温/降额阈值线标注                                                                     |
+| 实时性  | dt 抖动直方图、raw_dt/math_dt/exec 时序、overrun/ring_depth/log_dropped_total 计数 | TimingLog                        | p50/p95/p99 实时统计                                                               |
+| 摘要   | 每条运动结束自动生成一行 `SETTLED t=… err=… ov=… i_pk=… sat=…`（docs/10 §3.2 格式）     | 全帧滑窗                             | **预警规则（docs/10 §3.2）**：i_pk 逼近 i_max → 黄色；sat>60% → 橙色；ov 变号 → 红色              |
 
 **验收标准**：
 
@@ -359,24 +363,24 @@ USB 线帧 (COBS 定界, 0x00 为帧界):
 
 ### 7.4 扩展功能（P2，均为超出 docs2 基线的增强项，明确标注）
 
-| 功能 | 说明 | 依据/风险 |
-|---|---|---|
-| FFT 频谱分析 | 对 PID 误差/速度信号做 FFT：识别震荡频率、估算阻尼比、定位噪声主频 → 指导滤波器截止频率设计 | **docs 未覆盖，属扩展**；采样率 100 Hz → 奈奎斯特 50 Hz，高于此的机械振动不可见，报告中必须标注 |
-| 傅里叶级数轨迹拟合 | 用有限项傅里叶级数拟合闭合/周期轨迹，评估轨迹平滑性与可复现性 | 用户点名扩展项；纯离线，无安全影响 |
-| 滤波器对比实验 | butter/savgol/移动平均等离线作用于同一日志，对比相位延迟与噪声抑制；结论经人工评审后回填机器人滤波参数 | 离线验证 → 人工回填，禁止自动下发 |
-| AdvantageScope 兼容 CSV 导出 | 导出位姿/遥测 CSV，用 AdvantageScope 做 2D/3D 场地图回放（§3.3 双轨策略） | 格式细节待查官方文档对齐，列为 M4 任务 |
-| 日志重放对比 | raw 快日志 + 真实 time_us → SensorValidator → Odometry → 与原 state 对比，输出逐字段首次分歧；旧故障日志成回归集 | docs2/12 §10.2、docs2/14 §7 强制方向；复用 `replay.hpp` 逻辑，建议以 C++ PC 测试目标实现而非 Python 重写 |
+| 功能                       | 说明                                                                                  | 依据/风险                                                                            |
+| ------------------------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| FFT 频谱分析                 | 对 PID 误差/速度信号做 FFT：识别震荡频率、估算阻尼比、定位噪声主频 → 指导滤波器截止频率设计                                | **docs 未覆盖，属扩展**；采样率 100 Hz → 奈奎斯特 50 Hz，高于此的机械振动不可见，报告中必须标注                     |
+| 傅里叶级数轨迹拟合                | 用有限项傅里叶级数拟合闭合/周期轨迹，评估轨迹平滑性与可复现性                                                     | 用户点名扩展项；纯离线，无安全影响                                                                |
+| 滤波器对比实验                  | butter/savgol/移动平均等离线作用于同一日志，对比相位延迟与噪声抑制；结论经人工评审后回填机器人滤波参数                          | 离线验证 → 人工回填，禁止自动下发                                                               |
+| AdvantageScope 兼容 CSV 导出 | 导出位姿/遥测 CSV，用 AdvantageScope 做 2D/3D 场地图回放（§3.3 双轨策略）                               | 格式细节待查官方文档对齐，列为 M4 任务                                                            |
+| 日志重放对比                   | raw 快日志 + 真实 time_us → SensorValidator → Odometry → 与原 state 对比，输出逐字段首次分歧；旧故障日志成回归集 | docs2/12 §10.2、docs2/14 §7 强制方向；复用 `replay.hpp` 逻辑，建议以 C++ PC 测试目标实现而非 Python 重写 |
 
 ### 7.5 技术栈建议（【设计决策】）
 
-| 层 | 选型 | 理由 |
-|---|---|---|
-| 串口 | Python + pyserial | 生态成熟，COBS/CRC 实现简单 |
-| 实时绘图 | pyqtgraph | 大数据量实时刷新性能优于 matplotlib |
-| 离线分析 | numpy + scipy + matplotlib | scipy.signal 覆盖 FFT/butter/savgol；matplotlib 出报告图 |
-| schema 校验 | pydantic 或 jsonschema | metadata.json / integrity_report.json 校验 |
-| SysId 拟合 | ctypes/pybind11 复用 C++ `fitFeedforward()`（首选）或 numpy 重实现（对拍验证） | 保证与固件算法一致性 |
-| 打包 | 单目录脚本起步，后期 PyInstaller 打包 exe | 队员零环境可用 |
+| 层         | 选型                                                             | 理由                                                |
+| --------- | -------------------------------------------------------------- | ------------------------------------------------- |
+| 串口        | Python + pyserial                                              | 生态成熟，COBS/CRC 实现简单                                |
+| 实时绘图      | pyqtgraph                                                      | 大数据量实时刷新性能优于 matplotlib                           |
+| 离线分析      | numpy + scipy + matplotlib                                     | scipy.signal 覆盖 FFT/butter/savgol；matplotlib 出报告图 |
+| schema 校验 | pydantic 或 jsonschema                                          | metadata.json / integrity_report.json 校验          |
+| SysId 拟合  | ctypes/pybind11 复用 C++ `fitFeedforward()`（首选）或 numpy 重实现（对拍验证） | 保证与固件算法一致性                                        |
+| 打包        | 单目录脚本起步，后期 PyInstaller 打包 exe                                  | 队员零环境可用                                           |
 
 目录建议（【设计决策】）：`statusmonitor/pc_tool/` 下分 `serial_rx.py / cobs_crc.py / frames.py / profiles.py / recorder.py / dashboard.py / analysis/integrity.py / analysis/kinematics.py / analysis/pid_report.py / analysis/sysid_fit.py / export/advantagescope.py`。
 
@@ -386,65 +390,65 @@ USB 线帧 (COBS 定界, 0x00 为帧界):
 
 ### 8.1 PID 整定组
 
-| 指标 | 定义/来源 | SOP 判据 |
-|---|---|---|
-| 过冲 ov | 峰值超调占目标比（docs/10 §1/§3.2） | < 3% |
-| settle 时间 | 进入并保持在误差带内所需时间（docs/10 §3.2） | 越短越好，按运动类型建基线 |
-| 终点误差 err | settle 时刻残余误差（docs/10 §1） | 终态 ±5 mm |
-| 稳态 σ | settle 后位置标准差（docs/10 §1） | < 3 mm |
-| 积分峰值 i_pk | 运动全程积分项最大值（docs/10 §3.2） | 逼近 i_max → 预警（积分饱和风险） |
-| 饱和占比 sat | 输出处于限幅的时间占比（docs/10 §3.2） | > 60% → 预警；输出峰值 ≤ 0.95（docs/10 §1） |
-| ov 变号 | 反复穿越目标（震荡标志）（docs/10 §3.2） | 出现 → 红色预警 |
-| P/I/D 分量曲线 | schema 1.1 新增字段（G3） | 分量形状诊断：D 过大噪声毛刺、I 爬升慢→ki 不足 |
+| 指标         | 定义/来源                        | SOP 判据                             |
+| ---------- | ---------------------------- | ---------------------------------- |
+| 过冲 ov      | 峰值超调占目标比（docs/10 §1/§3.2）    | < 3%                               |
+| settle 时间  | 进入并保持在误差带内所需时间（docs/10 §3.2） | 越短越好，按运动类型建基线                      |
+| 终点误差 err   | settle 时刻残余误差（docs/10 §1）    | 终态 ±5 mm                           |
+| 稳态 σ       | settle 后位置标准差（docs/10 §1）    | < 3 mm                             |
+| 积分峰值 i_pk  | 运动全程积分项最大值（docs/10 §3.2）     | 逼近 i_max → 预警（积分饱和风险）              |
+| 饱和占比 sat   | 输出处于限幅的时间占比（docs/10 §3.2）    | > 60% → 预警；输出峰值 ≤ 0.95（docs/10 §1） |
+| ov 变号      | 反复穿越目标（震荡标志）（docs/10 §3.2）   | 出现 → 红色预警                          |
+| P/I/D 分量曲线 | schema 1.1 新增字段（G3）          | 分量形状诊断：D 过大噪声毛刺、I 爬升慢→ki 不足        |
 
 ### 8.2 前馈 / SysId 组
 
-| 指标 | 定义/来源 | SOP 判据 |
-|---|---|---|
-| kS/kV/kA | V = kS·sign(v)+kV·v+kA·a，分侧分方向（docs2/11） | 多次重复参数一致性好 |
-| 训练/验证 RMSE、MAE、最大残差 | 拟合质量（docs2/11） | 验证集不显著劣于训练集 |
-| R² | 拟合优度（docs/10 §1） | > 0.99 |
-| 残差分布 | 残差直方图/正态性（docs2/11） | 无明显结构（结构性残差 = 模型缺项） |
-| 逐侧不对称性 | 左/右 kV、kA 差异 | 显著差异 → 查机械/摩擦 |
+| 指标                  | 定义/来源                                    | SOP 判据              |
+| ------------------- | ---------------------------------------- | ------------------- |
+| kS/kV/kA            | V = kS·sign(v)+kV·v+kA·a，分侧分方向（docs2/11） | 多次重复参数一致性好          |
+| 训练/验证 RMSE、MAE、最大残差 | 拟合质量（docs2/11）                           | 验证集不显著劣于训练集         |
+| R²                  | 拟合优度（docs/10 §1）                         | > 0.99              |
+| 残差分布                | 残差直方图/正态性（docs2/11）                      | 无明显结构（结构性残差 = 模型缺项） |
+| 逐侧不对称性              | 左/右 kV、kA 差异                             | 显著差异 → 查机械/摩擦       |
 
 ### 8.3 滤波器设计组
 
-| 指标 | 定义/来源 | 用途 |
-|---|---|---|
-| 滤波后速度信噪比 | 滤波前后速度方差比（docs/10 §2 第四条曲线） | 选滤波器类型/参数 |
-| 相位延迟 | 滤波器引入的滞后拍数 | 过大 → 闭环不稳 |
-| 噪声主频 | FFT 噪声谱峰（P2 扩展） | 定截止频率 |
-| jerk 幅值分布 | 加速度差分（注意噪声警告，docs2/12 §8） | 评估 S 曲线/滤波需求 |
+| 指标        | 定义/来源                       | 用途           |
+| --------- | --------------------------- | ------------ |
+| 滤波后速度信噪比  | 滤波前后速度方差比（docs/10 §2 第四条曲线） | 选滤波器类型/参数    |
+| 相位延迟      | 滤波器引入的滞后拍数                  | 过大 → 闭环不稳    |
+| 噪声主频      | FFT 噪声谱峰（P2 扩展）             | 定截止频率        |
+| jerk 幅值分布 | 加速度差分（注意噪声警告，docs2/12 §8）   | 评估 S 曲线/滤波需求 |
 
 ### 8.4 轨迹跟踪组
 
-| 指标 | 定义/来源 | 用途 |
-|---|---|---|
-| 横向/纵向跟踪误差 | 轨迹误差分解 | 调跟踪器增益 |
-| 曲率段误差 | 按路径曲率分组的误差 | 查角速度限制是否合理 |
-| 终点 settle 质量 | 复用 8.1 判据 | 路线逐段验收 |
-| 电池分组一致性 | 11.5 V vs 12.6 V 表现（docs/10 §1） | 验证无 12/Vbattery 放大后的一致性 |
+| 指标           | 定义/来源                           | 用途                      |
+| ------------ | ------------------------------- | ----------------------- |
+| 横向/纵向跟踪误差    | 轨迹误差分解                          | 调跟踪器增益                  |
+| 曲率段误差        | 按路径曲率分组的误差                      | 查角速度限制是否合理              |
+| 终点 settle 质量 | 复用 8.1 判据                       | 路线逐段验收                  |
+| 电池分组一致性      | 11.5 V vs 12.6 V 表现（docs/10 §1） | 验证无 12/Vbattery 放大后的一致性 |
 
 ### 8.5 实时性审计组
 
-| 指标 | 定义/来源 | 判据 |
-|---|---|---|
-| t_exec p50/p95/p99 | TimingLog.exec 分布 | **p99 < 0.5 × T_nominal（5 ms）——遥测接入后必须满足** |
-| dt 抖动 | raw_dt 直方图 | 无系统性长尾 |
-| overrun 计数 | TimingLog.overrun | 应为 0 |
-| ring_depth 峰值 | TimingLog.ring_depth | 远低于环容量，无单调增长 |
-| log_dropped_total | 生产者丢帧计数 | 正常工况应为 0；非零必须可解释 |
-| usb_dropped_total | USB sink 丢帧计数（本策划新增） | 摘要流内应接近 0 |
+| 指标                 | 定义/来源                | 判据                                         |
+| ------------------ | -------------------- | ------------------------------------------ |
+| t_exec p50/p95/p99 | TimingLog.exec 分布    | **p99 < 0.5 × T_nominal（5 ms）——遥测接入后必须满足** |
+| dt 抖动              | raw_dt 直方图           | 无系统性长尾                                     |
+| overrun 计数         | TimingLog.overrun    | 应为 0                                       |
+| ring_depth 峰值      | TimingLog.ring_depth | 远低于环容量，无单调增长                               |
+| log_dropped_total  | 生产者丢帧计数              | 正常工况应为 0；非零必须可解释                           |
+| usb_dropped_total  | USB sink 丢帧计数（本策划新增） | 摘要流内应接近 0                                  |
 
 ### 8.6 安全健康组
 
-| 指标 | 定义/来源 | 判据 |
-|---|---|---|
-| 电机温度（起止 + 峰值） | 电机样本（docs2/12 §4.1） | 超阈值 → derate 应已触发且日志可解释 |
-| 电机电流峰值/均值 | 电机样本 | 卡死/滑移诊断 |
-| 电池起止电压 | battery_V（docs2/12 §4.1） | 分组统计基础 |
-| 故障位/derate 事件 | FaultLog/ActuatorLog | 所有保护必须由日志解释（docs2/12） |
-| IMU 静置漂移 | 静置 1 min 角度变化（docs/10 §1） | < 1° |
+| 指标            | 定义/来源                     | 判据                      |
+| ------------- | ------------------------- | ----------------------- |
+| 电机温度（起止 + 峰值） | 电机样本（docs2/12 §4.1）       | 超阈值 → derate 应已触发且日志可解释 |
+| 电机电流峰值/均值     | 电机样本                      | 卡死/滑移诊断                 |
+| 电池起止电压        | battery_V（docs2/12 §4.1）  | 分组统计基础                  |
+| 故障位/derate 事件 | FaultLog/ActuatorLog      | 所有保护必须由日志解释（docs2/12）   |
+| IMU 静置漂移      | 静置 1 min 角度变化（docs/10 §1） | < 1°                    |
 
 ---
 
@@ -508,29 +512,29 @@ USB 线帧 (COBS 定界, 0x00 为帧界):
 
 ### 9.6 遥测不干扰控制环验收矩阵（每个里程碑出口必跑）
 
-| 测试 | 方法 | 通过判据 |
-|---|---|---|
-| 最坏负载时序 | 遥测双 sink 全开 + 满速激励运动 | **p99(t_exec) < 0.5 × T_nominal（5 ms）**，overrun = 0 |
-| 暂停消费者 | 冻结 TelemetryTask 60 s | 控制输出与时序不变；log_dropped_total 增长可解释；恢复后无雪崩 |
-| SD 拔出 | 运动中拔卡 30 s 再插回 | 控制环 p99 不恶化；SD sink 计数退避；恢复后续写或换文件，不崩溃 |
-| USB 断开 | 运动中拔线 30 s 再插回 | 控制环无感知；usb_dropped_total 计数；重连后流恢复 |
-| 满环注入 | 强制消费者慢速 | 生产者丢新帧不丢旧语义正确，计数一致 |
+| 测试     | 方法                    | 通过判据                                                |
+| ------ | --------------------- | --------------------------------------------------- |
+| 最坏负载时序 | 遥测双 sink 全开 + 满速激励运动  | **p99(t_exec) < 0.5 × T_nominal（5 ms）**，overrun = 0 |
+| 暂停消费者  | 冻结 TelemetryTask 60 s | 控制输出与时序不变；log_dropped_total 增长可解释；恢复后无雪崩            |
+| SD 拔出  | 运动中拔卡 30 s 再插回        | 控制环 p99 不恶化；SD sink 计数退避；恢复后续写或换文件，不崩溃              |
+| USB 断开 | 运动中拔线 30 s 再插回        | 控制环无感知；usb_dropped_total 计数；重连后流恢复                  |
+| 满环注入   | 强制消费者慢速               | 生产者丢新帧不丢旧语义正确，计数一致                                  |
 
 ---
 
 ## 10. 风险与未核实项
 
-| 编号 | 事项 | 状态 | 处置 |
-|---|---|---|---|
-| R1 | PROS stdout 最大持续吞吐无权威公开数字 | **待实测** | M0 第一项任务；在实测前 USB 全速帧模式不得默认开启 |
-| R2 | LogFrame 帧长 712 B 为字段推算值 | **待确认** | M0 用 `static_assert(sizeof(LogFrame))` 锁定并重算码率 |
-| R3 | SD 卡 FAT32 连续写速与慢卡行为 | **待实测** | M1 出口条件含 ≥ 5 min 连续录制；建议备两张不同品牌卡对比 |
-| R4 | LemLib 等外部库日志格式兼容性 | **未评估** | 本系统自研协议，不依赖 LemLib；若未来引入 LemLib 需单独评估其日志导出对接 |
-| R5 | jerk 与 FFT 超出 docs 文档基线 | **扩展项** | 全部归入 P2；jerk 曲线固定带噪声警告（docs2/12 §8）；FFT 结果标注 50 Hz 奈奎斯特上限 |
-| R6 | 当前 cycle 不跑里程计（G4） | 依赖板块 8 | 位姿类功能先占位，板块 8 解锁后自动生效；不阻塞 M0–M2 其余部分 |
-| R7 | schema 1.1 加 PID 分量字段改变帧长 | 设计内 | 与 M0 帧长锁定同步冻结；schema minor 升级，PC 端兼容解析 |
-| R8 | PC 掉线/高负载时 GUI 积压 | 设计内 | 接收线程有界队列 + 丢帧计数；仪表盘可降级为只录不画 |
-| R9 | 手柄 VEXnet 备用通道带宽延迟 | 已核实不适合实时 | 仅低速健康摘要；不投入开发量，列入「未来可选」 |
+| 编号  | 事项                        | 状态       | 处置                                                        |
+| --- | ------------------------- | -------- | --------------------------------------------------------- |
+| R1  | PROS stdout 最大持续吞吐无权威公开数字 | **待实测**  | M0 第一项任务；在实测前 USB 全速帧模式不得默认开启                             |
+| R2  | LogFrame 帧长 712 B 为字段推算值  | **待确认**  | M0 用 `static_assert(sizeof(LogFrame))` 锁定并重算码率            |
+| R3  | SD 卡 FAT32 连续写速与慢卡行为      | **待实测**  | M1 出口条件含 ≥ 5 min 连续录制；建议备两张不同品牌卡对比                        |
+| R4  | LemLib 等外部库日志格式兼容性        | **未评估**  | 本系统自研协议，不依赖 LemLib；若未来引入 LemLib 需单独评估其日志导出对接              |
+| R5  | jerk 与 FFT 超出 docs 文档基线   | **扩展项**  | 全部归入 P2；jerk 曲线固定带噪声警告（docs2/12 §8）；FFT 结果标注 50 Hz 奈奎斯特上限 |
+| R6  | 当前 cycle 不跑里程计（G4）        | 依赖板块 8   | 位姿类功能先占位，板块 8 解锁后自动生效；不阻塞 M0–M2 其余部分                      |
+| R7  | schema 1.1 加 PID 分量字段改变帧长 | 设计内      | 与 M0 帧长锁定同步冻结；schema minor 升级，PC 端兼容解析                    |
+| R8  | PC 掉线/高负载时 GUI 积压         | 设计内      | 接收线程有界队列 + 丢帧计数；仪表盘可降级为只录不画                               |
+| R9  | 手柄 VEXnet 备用通道带宽延迟        | 已核实不适合实时 | 仅低速健康摘要；不投入开发量，列入「未来可选」                                   |
 
 ---
 

@@ -7,8 +7,11 @@ This file records implementation commits in simple English. Dedicated `chore(log
 - 4cdafb0b86d66223d7011bdda6b56e7b74932929 — Redesigned the PC status monitor frontend as a dark engineering-instrument console while preserving all analysis workflows.
 
 - 72a888df1e44944910346b98d4da8b6e22321fe1 — Prevented local flight recordings and generated analysis evidence from being committed or pushed.
+
 - 213b4134f24692ec4e71cbb820dd1701d44b5d3c — Added the guided TF session workflow with a three-choice home, step-by-step import, history, and automatic results.
+
 - df2acd5d8bd0bd2e8ead867dc092665a7a52bacc — Added the Chinese Swiss-grid desktop interface while preserving all PC analysis workflows.
+
 - 63245809280c3f20286663223d6ae3715afc742a — Added the complete PC flight-log import, integrity, analysis, GUI, comparison, replay, reporting, and Windows packaging system.
 
 ## 2026-07-20
