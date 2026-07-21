@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vex-statusmonitor"
-version = "0.2.0"
+version = "0.3.0"
 description = "VEX V5 flight-log importer, analyzer, desktop GUI, and LLM evidence pack generator."
 readme = "README.md"
 requires-python = ">=3.11"

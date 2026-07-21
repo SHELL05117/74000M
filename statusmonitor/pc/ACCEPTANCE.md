@@ -25,7 +25,7 @@
 | SysId | Fixed-vector solver test; runtime requires calibrated linear velocity and train/validation labels | PASS / gated |
 | Run comparison | Identity/config-aware summary and delta output, PNG summary | PASS |
 | Recorded replay | V5L↔Parquet equivalence and time-indexed causal-chain snapshot | PASS |
-| Human GUI | Eight Chinese Swiss-grid pages, numbered navigation/shortcuts, worker-thread import/analysis, interactive Parquet plots, offscreen smoke test | PASS |
+| Human GUI | Three-choice home, guided three-step TF workflow, session history/results center, animated worker processing, interactive Parquet plots, offscreen smoke test | PASS |
 | LLM pack | Report, dictionary, timeline, metrics, events, evidence CSVs, SHA-256 manifest | PASS |
 | CLI | doctor/session/window/scan/check/import/analyze/compare/replay/report/gui | PASS |
 | Windows packaging | PyInstaller one-directory build; packaged EXE offscreen startup/clean exit | PASS |
@@ -33,8 +33,12 @@
 ## 2026-07-21 offline test record
 
 - Ruff: PASS.
-- PC tests: 18 PASS, 1 stress test skipped by default.
+- PC tests: 19 PASS, 1 stress test skipped by default.
 - Explicit stress test: PASS, 360,000 frames at 100 Hz (60 minutes).
+- Guided GUI workflow: PASS, synthetic TF scan through background import,
+  analysis, report generation, and automatic results-page transition.
+- Visual QA: PASS at 1480×920 and the 1120×720 minimum window size for the
+  three-choice home, all wizard stages, loading state, history, and results.
 - Packaged executable:
   `dist/VEXFlightStatusMonitor/VEXFlightStatusMonitor.exe`, startup/exit code 0.
 - Native PC regression: CMake Release build PASS; CTest 5/5 PASS.

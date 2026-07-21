@@ -10,11 +10,13 @@ The application never writes robot parameters or commands a robot.
 
 ## Desktop interface
 
-Version 0.2 uses a fully Chinese Swiss-grid interface derived from the selected
-J concept: warm white canvas, numbered navigation, one VEX-red action color,
-flat tables, and evidence-first typography. All eight workflows and their
-underlying behavior are unchanged. Use `Ctrl+1` through `Ctrl+8` to switch
-pages.
+Version 0.3 uses a guided Chinese workflow derived from the selected J concept.
+The home screen contains only three choices: create a TF recording session,
+continue an existing session, or open history. Creation and import use a
+three-step form, then integrity checking, analysis, plots, and the LLM evidence
+pack are generated in one background operation. The detailed tools remain
+available inside the selected session instead of competing for attention on
+the home screen.
 
 ## Install and run
 

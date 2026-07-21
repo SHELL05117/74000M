@@ -174,6 +174,14 @@ if QtCore is not None:
         return widget
 
 
+    def _select_combo_data(combo: QtWidgets.QComboBox, value: object) -> bool:
+        index = combo.findData(value)
+        if index < 0:
+            return False
+        combo.setCurrentIndex(index)
+        return True
+
+
     class RefreshablePage(QtWidgets.QWidget):
         def __init__(self, repo: Repository, on_change: Callable[[], None]):
             super().__init__()
@@ -578,10 +586,14 @@ if QtCore is not None:
             top = QtWidgets.QHBoxLayout()
             self.run = QtWidgets.QComboBox()
             self.run.currentIndexChanged.connect(self.load)
-            analyze = _primary(QtWidgets.QPushButton("开始分析 / 重新生成"))
-            analyze.clicked.connect(self.analyze)
+            self.analyze_button = _primary(
+                QtWidgets.QPushButton("开始分析 / 重新生成")
+            )
+            self.analyze_button.setMaximumWidth(220)
+            self.analyze_button.clicked.connect(self.analyze)
             top.addWidget(self.run, 1)
-            top.addWidget(analyze)
+            top.addStretch()
+            top.addWidget(self.analyze_button)
             layout.addLayout(top)
             self.cards = QtWidgets.QGridLayout()
             layout.addLayout(self.cards)
@@ -620,6 +632,7 @@ if QtCore is not None:
             while self.cards.count():
                 item = self.cards.takeAt(0)
                 if item.widget():
+                    item.widget().hide()
                     item.widget().deleteLater()
             self.anomalies.setRowCount(0)
             run_id = self.run.currentData()
@@ -874,6 +887,638 @@ if QtCore is not None:
                 QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(path)))
 
 
+    class HomePage(RefreshablePage):
+        def __init__(self, repo, on_new, on_continue, on_history):
+            super().__init__(repo, lambda: None)
+            layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(42, 54, 42, 54)
+            layout.setSpacing(18)
+            layout.addStretch()
+            kicker = QtWidgets.QLabel("VEX V5 / TF 飞行记录")
+            kicker.setObjectName("homeKicker")
+            title = QtWidgets.QLabel("选择接下来要做的事情")
+            title.setObjectName("homeTitle")
+            subtitle = QtWidgets.QLabel("从创建记录到查看分析，只需要完成一条清晰流程。")
+            subtitle.setObjectName("homeSubtitle")
+            layout.addWidget(kicker)
+            layout.addWidget(title)
+            layout.addWidget(subtitle)
+            actions = QtWidgets.QHBoxLayout()
+            actions.setSpacing(14)
+            definitions = [
+                (
+                    "01",
+                    "新建 TF 记录",
+                    "填写本次实验信息，选择 TF 卡记录并自动分析",
+                    on_new,
+                    True,
+                ),
+                (
+                    "02",
+                    "继续会话",
+                    "选择已有会话，继续导入下一批 TF 记录",
+                    on_continue,
+                    False,
+                ),
+                (
+                    "03",
+                    "历史记录",
+                    "查看历史会话的图表、指标和 LLM 信息包",
+                    on_history,
+                    False,
+                ),
+            ]
+            self.action_buttons = []
+            for number, label, description, callback, primary in definitions:
+                button = QtWidgets.QPushButton(
+                    f"{number}\n{label}\n{description}"
+                )
+                button.setObjectName("homeAction")
+                button.setProperty("featured", primary)
+                button.setMinimumHeight(190)
+                button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+                button.clicked.connect(callback)
+                actions.addWidget(button, 1)
+                self.action_buttons.append(button)
+            layout.addLayout(actions)
+            layout.addStretch()
+
+
+    class LoadingPage(QtWidgets.QWidget):
+        def __init__(self):
+            super().__init__()
+            self.setObjectName("page")
+            self._base_text = "正在处理"
+            self._dots = 0
+            self.timer = QtCore.QTimer(self)
+            self.timer.setInterval(360)
+            self.timer.timeout.connect(self._animate)
+            layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(120, 80, 120, 80)
+            layout.addStretch()
+            self.code = QtWidgets.QLabel("PROCESSING / OFFLINE")
+            self.code.setObjectName("loadingCode")
+            self.title = QtWidgets.QLabel(self._base_text)
+            self.title.setObjectName("loadingTitle")
+            self.detail = QtWidgets.QLabel(
+                "系统正在校验原始记录、生成分析结果和 LLM 信息包，请勿移除数据源。"
+            )
+            self.detail.setObjectName("homeSubtitle")
+            self.detail.setWordWrap(True)
+            self.progress = QtWidgets.QProgressBar()
+            self.progress.setRange(0, 0)
+            layout.addWidget(self.code)
+            layout.addWidget(self.title)
+            layout.addWidget(self.detail)
+            layout.addSpacing(18)
+            layout.addWidget(self.progress)
+            layout.addStretch()
+
+        def start(self, message: str, detail: str = "") -> None:
+            self._base_text = message
+            self._dots = 0
+            self.title.setText(message)
+            if detail:
+                self.detail.setText(detail)
+            self.timer.start()
+
+        def stop(self) -> None:
+            self.timer.stop()
+
+        def _animate(self) -> None:
+            self._dots = (self._dots + 1) % 4
+            self.title.setText(self._base_text + "." * self._dots)
+
+
+    class SessionWizardPage(RefreshablePage):
+        STEP_NAMES = ["会话信息", "实验条件", "选择 TF 记录"]
+
+        def __init__(self, repo, on_home, on_busy, on_complete, on_failure):
+            super().__init__(repo, lambda: None)
+            self.on_home = on_home
+            self.on_busy = on_busy
+            self.on_complete = on_complete
+            self.on_failure = on_failure
+            self.pool = QtCore.QThreadPool.globalInstance()
+            self.session_id: str | None = None
+            self.candidates = []
+            self.step_index = 0
+
+            layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(42, 28, 42, 34)
+            layout.setSpacing(14)
+            top = QtWidgets.QHBoxLayout()
+            back_home = QtWidgets.QPushButton("← 返回首页")
+            back_home.setProperty("role", "quiet")
+            back_home.clicked.connect(on_home)
+            self.flow_title = QtWidgets.QLabel("新建 TF 记录")
+            self.flow_title.setObjectName("pageTitle")
+            top.addWidget(back_home)
+            top.addSpacing(12)
+            top.addWidget(self.flow_title)
+            top.addStretch()
+            layout.addLayout(top)
+
+            self.step_bar = QtWidgets.QHBoxLayout()
+            self.step_labels = []
+            for index, name in enumerate(self.STEP_NAMES, start=1):
+                label = QtWidgets.QLabel(f"{index:02d}  {name}")
+                label.setObjectName("wizardStep")
+                self.step_bar.addWidget(label, 1)
+                self.step_labels.append(label)
+            layout.addLayout(self.step_bar)
+
+            self.steps = QtWidgets.QStackedWidget()
+            self.steps.addWidget(self._build_identity_step())
+            self.steps.addWidget(self._build_conditions_step())
+            self.steps.addWidget(self._build_import_step())
+            layout.addWidget(self.steps, 1)
+
+            controls = QtWidgets.QHBoxLayout()
+            self.back_button = QtWidgets.QPushButton("上一步")
+            self.back_button.clicked.connect(self.previous_step)
+            self.next_button = _primary(QtWidgets.QPushButton("下一步"))
+            self.next_button.clicked.connect(self.next_step)
+            controls.addWidget(self.back_button)
+            controls.addStretch()
+            controls.addWidget(self.next_button)
+            layout.addLayout(controls)
+            self._set_step(0)
+
+        def _form_page(self, title: str, description: str) -> tuple[QtWidgets.QWidget, QtWidgets.QFormLayout]:
+            page = QtWidgets.QWidget()
+            page.setObjectName("wizardPanel")
+            outer = QtWidgets.QVBoxLayout(page)
+            outer.setContentsMargins(28, 24, 28, 24)
+            heading = QtWidgets.QLabel(title)
+            heading.setObjectName("sectionHeading")
+            hint = QtWidgets.QLabel(description)
+            hint.setObjectName("pageDescription")
+            hint.setWordWrap(True)
+            outer.addWidget(heading)
+            outer.addWidget(hint)
+            form = QtWidgets.QFormLayout()
+            form.setHorizontalSpacing(22)
+            form.setVerticalSpacing(12)
+            form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
+            outer.addLayout(form)
+            outer.addStretch()
+            return page, form
+
+        def _build_identity_step(self) -> QtWidgets.QWidget:
+            page, form = self._form_page(
+                "这次记录属于谁？",
+                "带 * 的信息用于建立会话身份；机器人身份仍以 TF 原始记录为准。",
+            )
+            self.team = QtWidgets.QLineEdit("74000M")
+            self.operator = QtWidgets.QLineEdit()
+            self.test_type = QtWidgets.QComboBox()
+            self.test_type.setEditable(True)
+            for label, value in TEST_TYPE_ITEMS:
+                self.test_type.addItem(label, value)
+            self.test_case = QtWidgets.QLineEdit()
+            self.test_case.setPlaceholderText("例如：DRIVE-STRAIGHT-01")
+            self.dataset_role = QtWidgets.QComboBox()
+            for role in DatasetRole:
+                self.dataset_role.addItem(DATASET_ROLE_LABELS[role], role)
+            form.addRow("队号 *", self.team)
+            form.addRow("操作员 *", self.operator)
+            form.addRow("测试类型 *", self.test_type)
+            form.addRow("测试用例 ID", self.test_case)
+            form.addRow("数据集用途", self.dataset_role)
+            return page
+
+        def _build_conditions_step(self) -> QtWidgets.QWidget:
+            page, form = self._form_page(
+                "补充实验条件",
+                "这些信息会进入报告，帮助区分场地、电池和操作者造成的差异。",
+            )
+            self.observer = QtWidgets.QLineEdit()
+            self.surface = QtWidgets.QLineEdit()
+            self.battery = QtWidgets.QLineEdit()
+            self.expected_robot = QtWidgets.QLineEdit()
+            self.notes = QtWidgets.QPlainTextEdit()
+            self.notes.setMaximumHeight(100)
+            form.addRow("观察员", self.observer)
+            form.addRow("场地表面", self.surface)
+            form.addRow("电池编号", self.battery)
+            form.addRow("预期机器人 ID", self.expected_robot)
+            form.addRow("备注", self.notes)
+            return page
+
+        def _build_import_step(self) -> QtWidgets.QWidget:
+            page = QtWidgets.QWidget()
+            page.setObjectName("wizardPanel")
+            layout = QtWidgets.QVBoxLayout(page)
+            layout.setContentsMargins(28, 24, 28, 24)
+            heading = QtWidgets.QLabel("选择要导入的 TF 记录")
+            heading.setObjectName("sectionHeading")
+            hint = QtWidgets.QLabel(
+                "选择 TF 卡盘符或包含 FLIGHT 文件夹的目录。扫描后可取消不需要的记录。"
+            )
+            hint.setObjectName("pageDescription")
+            hint.setWordWrap(True)
+            layout.addWidget(heading)
+            layout.addWidget(hint)
+            path_row = QtWidgets.QHBoxLayout()
+            self.path = QtWidgets.QLineEdit()
+            self.path.setPlaceholderText("选择 TF 卡或记录目录")
+            browse = QtWidgets.QPushButton("选择目录…")
+            browse.clicked.connect(self.browse)
+            self.scan_button = _primary(QtWidgets.QPushButton("扫描记录"))
+            self.scan_button.clicked.connect(self.scan)
+            path_row.addWidget(self.path, 1)
+            path_row.addWidget(browse)
+            path_row.addWidget(self.scan_button)
+            layout.addLayout(path_row)
+            self.scan_progress = QtWidgets.QProgressBar()
+            self.scan_progress.setRange(0, 1)
+            self.scan_progress.setValue(0)
+            layout.addWidget(self.scan_progress)
+            self.table = QtWidgets.QTableWidget(0, 7)
+            self.table.setHorizontalHeaderLabels(
+                ["导入", "文件", "完整性", "机器人", "序号", "帧数", "时长 [s]"]
+            )
+            _configure_table(self.table)
+            self.table.horizontalHeader().setSectionResizeMode(
+                1, QtWidgets.QHeaderView.ResizeMode.Stretch
+            )
+            layout.addWidget(self.table, 1)
+            return page
+
+        def start_new(self) -> None:
+            self.session_id = None
+            self.flow_title.setText("新建 TF 记录")
+            self.team.setText("74000M")
+            self.operator.clear()
+            self.observer.clear()
+            self.test_type.setCurrentIndex(0)
+            self.test_case.clear()
+            self.dataset_role.setCurrentIndex(0)
+            self.surface.clear()
+            self.battery.clear()
+            self.expected_robot.clear()
+            self.notes.clear()
+            self.path.clear()
+            self.candidates = []
+            self.table.setRowCount(0)
+            self.scan_progress.setRange(0, 1)
+            self.scan_progress.setValue(0)
+            self._set_step(0)
+
+        def continue_session(self, session_id: str) -> None:
+            session = self.repo.get_session(session_id)
+            self.session_id = session_id
+            self.flow_title.setText("继续会话")
+            self.team.setText(session.team_number)
+            self.operator.setText(session.operator)
+            self.observer.setText(session.observer)
+            if not _select_combo_data(self.test_type, session.test_type):
+                self.test_type.setEditText(session.test_type)
+            self.test_case.setText(session.test_case_id)
+            _select_combo_data(self.dataset_role, session.dataset_role)
+            self.surface.setText(session.surface)
+            self.battery.setText(session.battery_id)
+            self.expected_robot.setText(session.expected_robot_id)
+            self.notes.setPlainText(session.notes)
+            self.path.clear()
+            self.candidates = []
+            self.table.setRowCount(0)
+            self._set_step(2)
+
+        def _set_step(self, index: int) -> None:
+            self.step_index = max(0, min(index, len(self.STEP_NAMES) - 1))
+            self.steps.setCurrentIndex(self.step_index)
+            for position, label in enumerate(self.step_labels):
+                label.setProperty("state", "active" if position == self.step_index else "idle")
+                label.style().unpolish(label)
+                label.style().polish(label)
+            self.back_button.setEnabled(self.step_index > 0)
+            self.next_button.setText(
+                "导入、分析并查看结果" if self.step_index == 2 else "下一步"
+            )
+
+        def previous_step(self) -> None:
+            self._set_step(self.step_index - 1)
+
+        def next_step(self) -> None:
+            if self.step_index == 0:
+                if not self.team.text().strip() or not self.operator.text().strip():
+                    _error(self, "请填写队号和操作员。")
+                    return
+                if not (self.test_type.currentData() or self.test_type.currentText().strip()):
+                    _error(self, "请选择或填写测试类型。")
+                    return
+                self._set_step(1)
+                return
+            if self.step_index == 1:
+                self._set_step(2)
+                return
+            self.import_and_analyze()
+
+        def browse(self) -> None:
+            path = QtWidgets.QFileDialog.getExistingDirectory(self, "选择 TF 卡或记录目录")
+            if path:
+                self.path.setText(path)
+
+        def scan(self) -> None:
+            source = self.path.text().strip()
+            if not source:
+                _error(self, "请先选择 TF 卡或记录目录。")
+                return
+            self.scan_button.setEnabled(False)
+            self.scan_progress.setRange(0, 0)
+            worker = Worker(scan_recordings, source)
+            worker.signals.result.connect(self.show_candidates)
+            worker.signals.error.connect(lambda error: _error(self, error))
+            worker.signals.finished.connect(self._scan_finished)
+            self.pool.start(worker)
+
+        def _scan_finished(self) -> None:
+            self.scan_button.setEnabled(True)
+            self.scan_progress.setRange(0, 1)
+            self.scan_progress.setValue(1)
+
+        def show_candidates(self, candidates) -> None:
+            self.candidates = candidates
+            self.table.setRowCount(len(candidates))
+            for row, candidate in enumerate(candidates):
+                check = QtWidgets.QTableWidgetItem()
+                check.setFlags(check.flags() | QtCore.Qt.ItemFlag.ItemIsUserCheckable)
+                check.setCheckState(QtCore.Qt.CheckState.Checked)
+                self.table.setItem(row, 0, check)
+                status_value = (
+                    candidate.status.value
+                    if hasattr(candidate.status, "value")
+                    else candidate.status
+                )
+                values = [
+                    str(candidate.path),
+                    VERDICT_LABELS.get(status_value, status_value),
+                    candidate.robot_id,
+                    candidate.storage_sequence,
+                    candidate.frames,
+                    f"{candidate.duration_s:.3f}",
+                ]
+                for column, value in enumerate(values, start=1):
+                    self.table.setItem(row, column, QtWidgets.QTableWidgetItem(str(value)))
+            if not candidates:
+                _info(self, "没有找到可识别的 V5L/TMP 记录。")
+
+        def _metadata_fields(self) -> dict:
+            return {
+                "team_number": self.team.text(),
+                "operator": self.operator.text(),
+                "observer": self.observer.text(),
+                "test_type": self.test_type.currentData() or self.test_type.currentText(),
+                "test_case_id": self.test_case.text(),
+                "dataset_role": self.dataset_role.currentData(),
+                "surface": self.surface.text(),
+                "battery_id": self.battery.text(),
+                "expected_robot_id": self.expected_robot.text(),
+                "notes": self.notes.toPlainText(),
+            }
+
+        def import_and_analyze(self) -> None:
+            selected = [
+                candidate.path
+                for row, candidate in enumerate(self.candidates)
+                if self.table.item(row, 0) is not None
+                and self.table.item(row, 0).checkState() == QtCore.Qt.CheckState.Checked
+            ]
+            if not selected:
+                _error(self, "请先扫描并至少选择一段记录。")
+                return
+            fields = self._metadata_fields()
+            try:
+                if self.session_id:
+                    metadata = self.repo.get_session(self.session_id).model_copy(update=fields)
+                else:
+                    metadata = SessionMetadata(**fields)
+            except Exception as error:
+                _error(self, str(error))
+                return
+            existing_session_id = self.session_id
+            self.on_busy(
+                "正在生成本次记录",
+                f"共 {len(selected)} 段文件：校验 → 归档 → 分析 → 生成 LLM 报告",
+            )
+
+            def execute():
+                if existing_session_id:
+                    self.repo.save_session(metadata)
+                else:
+                    self.repo.create_session(metadata)
+                service = ImportService(self.repo)
+                pipeline = AnalysisPipeline(self.repo)
+                runs = []
+                for source in selected:
+                    run = service.import_recording(metadata.session_id, source)
+                    pipeline.analyze(run.run_id)
+                    runs.append(run)
+                return metadata.session_id, [run.run_id for run in runs]
+
+            worker = Worker(execute)
+            worker.signals.result.connect(
+                lambda result: self.on_complete(result[0], result[1])
+            )
+            worker.signals.error.connect(self.on_failure)
+            self.pool.start(worker)
+
+
+    class SessionPickerPage(RefreshablePage):
+        def __init__(self, repo, on_home, on_continue, on_history):
+            super().__init__(repo, lambda: None)
+            self.on_home = on_home
+            self.on_continue = on_continue
+            self.on_history = on_history
+            self.mode = "continue"
+            layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(42, 28, 42, 34)
+            layout.setSpacing(14)
+            top = QtWidgets.QHBoxLayout()
+            home = QtWidgets.QPushButton("← 返回首页")
+            home.setProperty("role", "quiet")
+            home.clicked.connect(on_home)
+            self.title = QtWidgets.QLabel("继续会话")
+            self.title.setObjectName("pageTitle")
+            top.addWidget(home)
+            top.addSpacing(12)
+            top.addWidget(self.title)
+            top.addStretch()
+            layout.addLayout(top)
+            self.description = QtWidgets.QLabel()
+            self.description.setObjectName("pageDescription")
+            layout.addWidget(self.description)
+            self.table = QtWidgets.QTableWidget(0, 7)
+            self.table.setHorizontalHeaderLabels(
+                ["会话", "更新时间", "队号", "操作员", "测试类型", "记录数", "状态"]
+            )
+            _configure_table(self.table)
+            self.table.horizontalHeader().setSectionResizeMode(
+                0, QtWidgets.QHeaderView.ResizeMode.Stretch
+            )
+            self.table.doubleClicked.connect(lambda _: self.open_selected())
+            layout.addWidget(self.table, 1)
+            bottom = QtWidgets.QHBoxLayout()
+            self.empty = QtWidgets.QLabel()
+            self.empty.setObjectName("pageDescription")
+            self.open_button = _primary(QtWidgets.QPushButton())
+            self.open_button.clicked.connect(self.open_selected)
+            bottom.addWidget(self.empty)
+            bottom.addStretch()
+            bottom.addWidget(self.open_button)
+            layout.addLayout(bottom)
+
+        def set_mode(self, mode: str) -> None:
+            self.mode = mode
+            if mode == "history":
+                self.title.setText("历史记录")
+                self.description.setText("选择一个历史会话，一键查看图表、指标与信息包。")
+                self.open_button.setText("查看图表与信息")
+            else:
+                self.title.setText("继续会话")
+                self.description.setText("选择一个已有会话，继续导入下一批 TF 记录。")
+                self.open_button.setText("继续导入 TF 记录")
+            self.refresh()
+
+        def refresh(self) -> None:
+            sessions = self.repo.list_sessions()
+            self.table.setRowCount(len(sessions))
+            for row, session in enumerate(sessions):
+                run_count = len(self.repo.list_runs(session.session_id))
+                values = [
+                    session.session_id,
+                    session.updated_at.astimezone().strftime("%Y-%m-%d %H:%M"),
+                    session.team_number,
+                    session.operator,
+                    TEST_TYPE_LABELS.get(session.test_type, session.test_type),
+                    run_count,
+                    SESSION_STATUS_LABELS.get(session.status.value, session.status.value),
+                ]
+                for column, value in enumerate(values):
+                    item = QtWidgets.QTableWidgetItem(str(value))
+                    if column == 0:
+                        item.setData(QtCore.Qt.ItemDataRole.UserRole, session.session_id)
+                    self.table.setItem(row, column, item)
+            if sessions:
+                self.table.selectRow(0)
+                self.empty.clear()
+                self.open_button.setEnabled(True)
+            else:
+                self.empty.setText("还没有会话，请先新建 TF 记录。")
+                self.open_button.setEnabled(False)
+
+        def open_selected(self) -> None:
+            row = self.table.currentRow()
+            item = self.table.item(row, 0) if row >= 0 else None
+            session_id = item.data(QtCore.Qt.ItemDataRole.UserRole) if item else None
+            if not session_id:
+                return
+            if self.mode == "history":
+                self.on_history(session_id)
+            else:
+                self.on_continue(session_id)
+
+
+    class ResultsPage(RefreshablePage):
+        def __init__(self, repo, on_home, on_continue, on_change):
+            super().__init__(repo, on_change)
+            self.session_id: str | None = None
+            layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(28, 20, 28, 26)
+            layout.setSpacing(12)
+            top = QtWidgets.QHBoxLayout()
+            home = QtWidgets.QPushButton("← 首页")
+            home.setProperty("role", "quiet")
+            home.clicked.connect(on_home)
+            self.title = QtWidgets.QLabel("会话结果")
+            self.title.setObjectName("pageTitle")
+            self.run = QtWidgets.QComboBox()
+            self.run.currentIndexChanged.connect(self._sync_run)
+            continue_button = QtWidgets.QPushButton("继续导入 TF 记录")
+            continue_button.clicked.connect(
+                lambda: on_continue(self.session_id) if self.session_id else None
+            )
+            top.addWidget(home)
+            top.addSpacing(10)
+            top.addWidget(self.title)
+            top.addStretch()
+            top.addWidget(QtWidgets.QLabel("当前记录"))
+            top.addWidget(self.run, 1)
+            top.addWidget(continue_button)
+            layout.addLayout(top)
+            self.summary = QtWidgets.QLabel()
+            self.summary.setObjectName("pageDescription")
+            layout.addWidget(self.summary)
+
+            self.views = QtWidgets.QTabWidget()
+            self.views.setObjectName("resultTabs")
+            self.overview = OverviewPage(repo, on_change)
+            self.plots = PlotsPage(repo, on_change)
+            self.integrity = IntegrityPage(repo, on_change)
+            self.report = ReportPage(repo, on_change)
+            self.compare = ComparePage(repo, on_change)
+            self.record_window = RecordWindowPage(repo, on_change)
+            for page in [self.overview, self.plots, self.integrity, self.report]:
+                page.run.setVisible(False)
+            self.views.addTab(self.overview, "运行总览")
+            self.views.addTab(self.plots, "图表分析")
+            self.views.addTab(self.integrity, "完整性")
+            self.views.addTab(self.report, "LLM 信息包")
+            self.views.addTab(self.compare, "运行对比")
+            self.views.addTab(self.record_window, "会话工具")
+            layout.addWidget(self.views, 1)
+
+        def show_session(self, session_id: str, run_id: str | None = None) -> None:
+            self.session_id = session_id
+            session = self.repo.get_session(session_id)
+            runs = self.repo.list_runs(session_id)
+            self.title.setText(f"{session.team_number} · {TEST_TYPE_LABELS.get(session.test_type, session.test_type)}")
+            self.summary.setText(
+                f"会话 {session.session_id}　·　操作员 {session.operator}　·　"
+                f"{len(runs)} 段记录　·　{SESSION_STATUS_LABELS.get(session.status.value, session.status.value)}"
+            )
+            self.run.blockSignals(True)
+            self.run.clear()
+            for run in runs:
+                self.run.addItem(
+                    f"{run.identity.robot_id} · 记录 {run.identity.storage_sequence:06d} · {run.run_id}",
+                    run.run_id,
+                )
+            self.run.blockSignals(False)
+            if run_id:
+                _select_combo_data(self.run, run_id)
+            self.refresh()
+
+        def refresh(self) -> None:
+            if not self.session_id:
+                return
+            selected = self.run.currentData()
+            for page in [
+                self.overview,
+                self.plots,
+                self.integrity,
+                self.report,
+                self.compare,
+                self.record_window,
+            ]:
+                page.refresh()
+            _select_combo_data(self.record_window.session, self.session_id)
+            if selected:
+                self._select_embedded_run(selected)
+
+        def _sync_run(self) -> None:
+            run_id = self.run.currentData()
+            if run_id:
+                self._select_embedded_run(run_id)
+
+        def _select_embedded_run(self, run_id: str) -> None:
+            for page in [self.overview, self.plots, self.integrity, self.report]:
+                if _select_combo_data(page.run, run_id):
+                    page.load()
+
+
     class MainWindow(QtWidgets.QMainWindow):
         def __init__(self):
             super().__init__()
@@ -885,133 +1530,131 @@ if QtCore is not None:
 
             shell = QtWidgets.QWidget()
             shell.setObjectName("appShell")
-            shell_layout = QtWidgets.QHBoxLayout(shell)
+            shell_layout = QtWidgets.QVBoxLayout(shell)
             shell_layout.setContentsMargins(0, 0, 0, 0)
             shell_layout.setSpacing(0)
-
-            sidebar = QtWidgets.QWidget()
-            sidebar.setObjectName("sidebar")
-            sidebar.setFixedWidth(228)
-            sidebar_layout = QtWidgets.QVBoxLayout(sidebar)
-            sidebar_layout.setContentsMargins(0, 0, 0, 0)
-            sidebar_layout.setSpacing(0)
-
-            brand_box = QtWidgets.QWidget()
-            brand_layout = QtWidgets.QVBoxLayout(brand_box)
-            brand_layout.setContentsMargins(28, 28, 24, 24)
-            brand_layout.setSpacing(2)
-            brand = QtWidgets.QLabel("VEX\nV5")
-            brand.setObjectName("brand")
-            brand_caption = QtWidgets.QLabel("飞行数据实验室")
-            brand_caption.setObjectName("brandCaption")
-            brand_layout.addWidget(brand)
-            brand_layout.addWidget(brand_caption)
-            sidebar_layout.addWidget(brand_box)
-
-            self.navigation = QtWidgets.QListWidget()
-            self.navigation.setObjectName("navigation")
-            self.navigation.setHorizontalScrollBarPolicy(
-                QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-            )
-            self.navigation.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
-            sidebar_layout.addWidget(self.navigation, 1)
-
-            sidebar_status = QtWidgets.QLabel(
-                f"●  离线分析\n只读观察与证据处理\n版本 {__version__}"
-            )
-            sidebar_status.setObjectName("sidebarStatus")
-            sidebar_layout.addWidget(sidebar_status)
-            shell_layout.addWidget(sidebar)
-
-            content = QtWidgets.QWidget()
-            content.setObjectName("contentArea")
-            content_layout = QtWidgets.QVBoxLayout(content)
-            content_layout.setContentsMargins(38, 24, 38, 18)
-            content_layout.setSpacing(12)
-
-            kicker = QtWidgets.QLabel("VEX V5 / 飞行数据")
-            kicker.setObjectName("appKicker")
-            content_layout.addWidget(kicker)
-            app_title = QtWidgets.QLabel("飞行记录与诊断系统")
-            app_title.setObjectName("appTitle")
-            content_layout.addWidget(app_title)
-            identity_row = QtWidgets.QHBoxLayout()
-            self.identity = QtWidgets.QLabel("74000M · 等待导入")
-            self.identity.setObjectName("identity")
+            header = QtWidgets.QWidget()
+            header.setObjectName("topBar")
+            header_layout = QtWidgets.QHBoxLayout(header)
+            header_layout.setContentsMargins(24, 13, 24, 13)
+            brand = QtWidgets.QPushButton("VEX V5  /  飞行记录与诊断")
+            brand.setObjectName("topBrand")
+            brand.clicked.connect(self.show_home)
             read_only = QtWidgets.QLabel("●  离线分析 · 不控制机器人")
             read_only.setObjectName("readOnlyChip")
-            identity_row.addWidget(self.identity)
-            identity_row.addStretch()
-            identity_row.addWidget(read_only)
-            content_layout.addLayout(identity_row)
-            header_rule = QtWidgets.QFrame()
-            header_rule.setObjectName("headerRule")
-            header_rule.setFrameShape(QtWidgets.QFrame.Shape.HLine)
-            content_layout.addWidget(header_rule)
+            version = QtWidgets.QLabel(f"版本 {__version__} · GPT-5.6")
+            version.setObjectName("topMeta")
+            header_layout.addWidget(brand)
+            header_layout.addStretch()
+            header_layout.addWidget(read_only)
+            header_layout.addSpacing(12)
+            header_layout.addWidget(version)
+            shell_layout.addWidget(header)
 
             self.tabs = QtWidgets.QStackedWidget()
-            content_layout.addWidget(self.tabs, 1)
-            shell_layout.addWidget(content, 1)
+            shell_layout.addWidget(self.tabs, 1)
             self.setCentralWidget(shell)
 
-            self.pages: list[RefreshablePage] = [
-                SessionPage(self.repo, self.refresh_all),
-                RecordWindowPage(self.repo, self.refresh_all),
-                ImportPage(self.repo, self.refresh_all),
-                IntegrityPage(self.repo, self.refresh_all),
-                OverviewPage(self.repo, self.refresh_all),
-                PlotsPage(self.repo, self.refresh_all),
-                ComparePage(self.repo, self.refresh_all),
-                ReportPage(self.repo, self.refresh_all),
-            ]
-            labels = [
-                "首页与会话",
-                "录制窗口",
-                "导入记录",
-                "完整性校验",
-                "运行总览",
-                "图表分析",
-                "运行对比",
-                "LLM 报告",
-            ]
-            for index, (label, page) in enumerate(zip(labels, self.pages, strict=True), start=1):
-                item = QtWidgets.QListWidgetItem(f"{index:02d}    {label}")
-                item.setSizeHint(QtCore.QSize(220, 50))
-                item.setToolTip(f"Ctrl+{index} · {label}")
-                self.navigation.addItem(item)
-                self.tabs.addWidget(page)
-                shortcut = QtGui.QShortcut(QtGui.QKeySequence(f"Ctrl+{index}"), self)
-                shortcut.activated.connect(
-                    lambda page_index=index - 1: self.navigation.setCurrentRow(page_index)
-                )
-            self.navigation.currentRowChanged.connect(self._select_page)
-            self.navigation.setCurrentRow(0)
-            self.refresh_chrome()
-            self.statusBar().showMessage(
-                f"产物目录：{self.repo.settings.artifacts}  ·  只读分析  ·  GPT-5.6"
+            self.home_page = HomePage(
+                self.repo,
+                self.start_new,
+                lambda: self.show_picker("continue"),
+                lambda: self.show_picker("history"),
             )
+            self.wizard_page = SessionWizardPage(
+                self.repo,
+                self.show_home,
+                self.show_loading,
+                self._import_complete,
+                self._import_failed,
+            )
+            self.picker_page = SessionPickerPage(
+                self.repo,
+                self.show_home,
+                self.continue_session,
+                self.open_results,
+            )
+            self.results_page = ResultsPage(
+                self.repo,
+                self.show_home,
+                self.continue_session,
+                self.refresh_all,
+            )
+            self.loading_page = LoadingPage()
+            self.pages = [
+                self.home_page,
+                self.wizard_page,
+                self.picker_page,
+                self.results_page,
+                self.loading_page,
+            ]
+            for page in self.pages:
+                self.tabs.addWidget(page)
+            self.show_home()
+            self.statusBar().hide()
 
-        def _select_page(self, index: int) -> None:
-            if 0 <= index < len(self.pages):
-                self.tabs.setCurrentIndex(index)
-                self.pages[index].refresh()
+        def show_home(self) -> None:
+            self.loading_page.stop()
+            self.tabs.setCurrentWidget(self.home_page)
 
-        def refresh_chrome(self) -> None:
-            sessions = self.repo.list_sessions()
-            runs = self.repo.list_runs()
-            if runs:
-                run = runs[0]
-                session = self.repo.get_session(run.session_id)
-                self.identity.setText(f"{session.team_number} · {run.identity.robot_id}")
-            elif sessions:
-                self.identity.setText(f"{sessions[0].team_number} · 等待导入")
-            else:
-                self.identity.setText("74000M · 等待导入")
+        def start_new(self) -> None:
+            self.wizard_page.start_new()
+            self.tabs.setCurrentWidget(self.wizard_page)
+
+        def show_picker(self, mode: str) -> None:
+            self.picker_page.set_mode(mode)
+            self.tabs.setCurrentWidget(self.picker_page)
+
+        def continue_session(self, session_id: str | None) -> None:
+            if not session_id:
+                return
+            self.wizard_page.continue_session(session_id)
+            self.tabs.setCurrentWidget(self.wizard_page)
+
+        def show_loading(self, message: str, detail: str = "") -> None:
+            self.loading_page.start(message, detail)
+            self.tabs.setCurrentWidget(self.loading_page)
+
+        def _import_complete(self, session_id: str, run_ids: list[str]) -> None:
+            self.loading_page.stop()
+            self.results_page.show_session(
+                session_id, run_ids[-1] if run_ids else None
+            )
+            self.tabs.setCurrentWidget(self.results_page)
+
+        def _import_failed(self, error: str) -> None:
+            self.loading_page.stop()
+            self.tabs.setCurrentWidget(self.wizard_page)
+            _error(self, error)
+
+        def open_results(self, session_id: str) -> None:
+            runs = self.repo.list_runs(session_id)
+            if not runs:
+                _info(self, "这个会话还没有导入记录，可从“继续会话”添加 TF 数据。")
+                return
+            latest = runs[0]
+            try:
+                self.repo.get_analysis(latest.run_id)
+            except KeyError:
+                self.show_loading("正在生成历史会话信息", "首次打开该记录，需要完成离线分析。")
+                worker = Worker(AnalysisPipeline(self.repo).analyze, latest.run_id)
+                worker.signals.result.connect(
+                    lambda _: self._import_complete(session_id, [latest.run_id])
+                )
+                worker.signals.error.connect(self._history_failed)
+                QtCore.QThreadPool.globalInstance().start(worker)
+                return
+            self.results_page.show_session(session_id, latest.run_id)
+            self.tabs.setCurrentWidget(self.results_page)
+
+        def _history_failed(self, error: str) -> None:
+            self.loading_page.stop()
+            self.tabs.setCurrentWidget(self.picker_page)
+            _error(self, error)
 
         def refresh_all(self):
-            for page in self.pages:
-                page.refresh()
-            self.refresh_chrome()
+            self.picker_page.refresh()
+            self.results_page.refresh()
 
 
 def main() -> int:
