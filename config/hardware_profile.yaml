@@ -85,14 +85,14 @@ capabilities:
 
 commissioning_test:
   enabled_in_non_field_opcontrol: true
-  tuning_revision: 5
+  tuning_revision: 6
   maximum_voltage_V: 12.0
-  controller_mapping: "Left Y throttle; Left X curvature; single-stick Curvature"
+  controller_mapping: "Compile-time selectable Curvature: SplitSticks uses Left Y throttle and Right X turn; SingleLeftStick uses Left Y throttle and Left X turn"
   throttle_cubic_weight: 0.0
   turn_cubic_weight: 0.15
   curvature_gain: 1.0
   quick_turn_gain: 1.0
-  quick_turn_trigger: "automatic while Left X is nonzero and throttle is within the hysteresis gate"
+  quick_turn_trigger: "automatic while the selected turn X axis is nonzero and throttle is within the hysteresis gate"
   quick_turn_enter_throttle: 0.15
   quick_turn_exit_throttle: 0.25
   arming: "none; drive is active immediately in non-field opcontrol"
