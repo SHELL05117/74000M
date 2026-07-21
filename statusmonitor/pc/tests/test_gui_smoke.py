@@ -31,6 +31,16 @@ def test_gui_constructs_guided_tf_workflow(isolated_home, monkeypatch):
         "历史记录",
     ]
 
+    # 运行环境的用户目录和项目目录不应显示在产品界面中。
+    labels = window.findChildren(QtWidgets.QLabel)
+    label_text = "\n".join(label.text() for label in labels)
+    assert "数据目录" not in label_text
+    assert str(window.repo.settings.artifacts) not in label_text
+    assert window.findChild(QtWidgets.QLabel, "statusPath") is None
+    assert window.findChild(QtWidgets.QLabel, "statusWorkspace").text() == (
+        "本地离线工作区 · 自动保存"
+    )
+
     window.home_page.action_buttons[0].click()
     assert window.tabs.currentWidget() is window.wizard_page
     assert window.wizard_page.steps.count() == 3

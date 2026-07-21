@@ -23,6 +23,7 @@ Testing/
 # Status monitor local runtime
 statusmonitor/artifacts/
 statusmonitor/pc/.venv/
+statusmonitor/pc/.venv-macos/
 statusmonitor/pc/.pytest_cache/
 statusmonitor/pc/.ruff_cache/
 statusmonitor/pc/build/

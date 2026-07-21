@@ -1171,8 +1171,7 @@ if QtCore is not None:
             left_column.addSpacing(12)
             meta_rows = [
                 ("版本", f"v{__version__}"),
-                ("数据目录", str(repo.settings.artifacts)),
-                ("分析引擎版本", ANALYSIS_VERSION),
+                ("分析算法版本", ANALYSIS_VERSION),
             ]
             meta = QtWidgets.QGridLayout()
             meta.setHorizontalSpacing(18)
@@ -1182,19 +1181,8 @@ if QtCore is not None:
                     continue
                 key_label = QtWidgets.QLabel(key)
                 key_label.setObjectName("homeMetaKey")
-                value_label = QtWidgets.QLabel()
+                value_label = QtWidgets.QLabel(value)
                 value_label.setObjectName("homeMetaValue")
-                if key == "数据目录":
-                    # 左栏宽度有限：ElideMiddle 保留盘符与末级，完整路径见底栏。
-                    metrics = QtGui.QFontMetrics(value_label.font())
-                    value_label.setText(
-                        metrics.elidedText(
-                            value, QtCore.Qt.TextElideMode.ElideMiddle, 280
-                        )
-                    )
-                    value_label.setToolTip(value)
-                else:
-                    value_label.setText(value)
                 meta.addWidget(key_label, row, 0)
                 meta.addWidget(value_label, row, 1)
             left_column.addLayout(meta)
@@ -1978,11 +1966,11 @@ if QtCore is not None:
             strip_layout = QtWidgets.QHBoxLayout(strip)
             strip_layout.setContentsMargins(24, 0, 24, 0)
             strip_layout.setSpacing(0)
-            path_label = QtWidgets.QLabel(str(self.repo.settings.artifacts))
-            path_label.setObjectName("statusPath")
+            workspace_label = QtWidgets.QLabel("本地离线工作区 · 自动保存")
+            workspace_label.setObjectName("statusWorkspace")
             note_label = QtWidgets.QLabel("PC 时间标记仅记录本地时间 · 不下发机器人")
             note_label.setObjectName("statusNote")
-            strip_layout.addWidget(path_label)
+            strip_layout.addWidget(workspace_label)
             strip_layout.addStretch()
             strip_layout.addWidget(note_label)
             shell_layout.addWidget(strip)

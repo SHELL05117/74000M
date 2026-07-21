@@ -103,12 +103,9 @@ QWidget#statusStrip {{
     background: {SHELL};
     border-top: 1px solid {LINE_SOFT};
 }}
-QLabel#statusPath, QLabel#statusNote {{
+QLabel#statusWorkspace, QLabel#statusNote {{
     color: {TEXT_FAINT};
     font-size: 11px;
-}}
-QLabel#statusPath {{
-    font-family: {MONO_FONT_STACK};
 }}
 
 QToolTip {{
