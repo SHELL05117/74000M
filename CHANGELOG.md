@@ -2,6 +2,10 @@
 
 This file records implementation commits in simple English. Dedicated `chore(log)` commits are intentionally omitted to avoid recursive log entries.
 
+## 2026-07-22
+
+- 75a705983cc671f4743e1134e2086cb7f1e8985a — Added a persistent one-command switch that cleans and builds firmware for 492X or 492Z.
+
 ## 2026-07-21
 
 - c0a3a68d1e40da65ff75ab80e3e75eed28b9a013 — Split the shared robot core into selectable 492X and 492Z identity and Smart Port profiles.
