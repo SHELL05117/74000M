@@ -4,6 +4,8 @@ This file records implementation commits in simple English. Dedicated `chore(log
 
 ## 2026-07-22
 
+- 00a96335dd8f027a6ebf32a6a8072de011e21cf4 — Simplified the main README and added the complete motor-port update workflow.
+
 - 75a705983cc671f4743e1134e2086cb7f1e8985a — Added a persistent one-command switch that cleans and builds firmware for 492X or 492Z.
 
 ## 2026-07-21
