@@ -15,6 +15,7 @@ temp.log
 temp.errors
 *.ini
 .d/
+.robot-profile.local.mk
 
 # PC build and test output
 build/

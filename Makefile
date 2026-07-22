@@ -14,6 +14,7 @@ INCDIR=$(ROOT)/include
 
 WARNFLAGS+=
 EXTRA_CFLAGS=
+-include .robot-profile.local.mk
 ROBOT_PROFILE?=492Z
 VALID_ROBOT_PROFILES:=492X 492Z
 ifeq ($(filter $(ROBOT_PROFILE),$(VALID_ROBOT_PROFILES)),)

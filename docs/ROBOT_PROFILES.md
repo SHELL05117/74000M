@@ -16,20 +16,27 @@ travel code. Only identity and Smart Port assignments differ.
 
 ## Selecting a robot
 
-PROS builds default to `492Z` in the root `Makefile`. Always clean when
-switching profiles:
+The quickest Windows workflow is:
 
 ```powershell
-make clean
-make ROBOT_PROFILE=492X
+.\robot 492X
 ```
 
 or:
 
 ```powershell
-make clean
-make ROBOT_PROFILE=492Z
+.\robot 492Z
 ```
+
+This command remembers the selected robot in the local ignored file
+`.robot-profile.local.mk`, cleans objects from the previous profile and builds
+`bin/hot.package.bin`. Later normal PROS build/download actions keep using the
+remembered profile. Add `-SelectOnly` to save the selection and clean without
+building, for example `.\robot 492X -SelectOnly`.
+
+The manual equivalent remains `make clean` followed by
+`make ROBOT_PROFILE=492X` or `make ROBOT_PROFILE=492Z`. PROS builds default to
+`492Z` only when no local selection exists.
 
 For PC builds, pass `-DROBOT_PROFILE=492X` or `-DROBOT_PROFILE=492Z` to CMake.
 The selection changes `RobotIdentity`, all motor ports, LCD identity, controller

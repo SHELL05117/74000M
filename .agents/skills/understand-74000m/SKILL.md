@@ -163,6 +163,18 @@ Add a new test source to `CMakeLists.txt`. Use `ROBOT_TEST`, `ROBOT_REQUIRE`, an
 
 ## PROS firmware build
 
+For the normal Windows workflow, select, clean, and build in one command:
+
+```powershell
+.\robot 492X
+# or
+.\robot 492Z
+```
+
+The selection persists in ignored `.robot-profile.local.mk`, so later PROS
+build/download actions use the same robot until another `robot` command changes
+it. The script always cleans when switching. Do not commit the local selection.
+
 With the PROS toolchain on `PATH`:
 
 ```powershell
